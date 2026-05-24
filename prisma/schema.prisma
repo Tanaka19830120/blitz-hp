@@ -1,0 +1,109 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum Role {
+  ADMIN
+  PLAYER
+}
+
+enum AttendanceStatus {
+  ATTENDING
+  ABSENT
+  PENDING
+  MAYBE
+}
+
+enum GameResult {
+  WIN
+  LOSE
+  DRAW
+}
+
+enum GameType {
+  REGULAR
+  PRACTICE
+  TOURNAMENT
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(PLAYER)
+  number    Int?
+  position  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  attendances Attendance[]
+  gameStats   GameStat[]
+}
+
+model Schedule {
+  id        String   @id @default(cuid())
+  date      DateTime
+  opponent  String
+  location  String
+  type      GameType @default(REGULAR)
+  meetTime  String?
+  startTime String?
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  attendances Attendance[]
+  game        Game?
+}
+
+model Attendance {
+  id         String           @id @default(cuid())
+  status     AttendanceStatus @default(PENDING)
+  note       String?
+  createdAt  DateTime         @default(now())
+  userId     String
+  scheduleId String
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  schedule Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, scheduleId])
+}
+
+model Game {
+  id            String     @id @default(cuid())
+  ourScore      Int
+  opponentScore Int
+  result        GameResult
+  note          String?
+  createdAt     DateTime   @default(now())
+  scheduleId    String     @unique
+
+  schedule Schedule  @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  stats    GameStat[]
+}
+
+model GameStat {
+  id           String  @id @default(cuid())
+  atBats       Int     @default(0)
+  hits         Int     @default(0)
+  rbi          Int     @default(0)
+  runs         Int     @default(0)
+  strikeouts   Int     @default(0)
+  walks        Int     @default(0)
+  position     String?
+  battingOrder Int?
+  userId       String
+  gameId       String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gameId])
+}
