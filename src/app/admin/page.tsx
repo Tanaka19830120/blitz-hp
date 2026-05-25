@@ -64,6 +64,20 @@ export default async function AdminPage() {
               <div className="text-xs text-[#64748b]">選手の追加・編集</div>
             </div>
           </Link>
+          <Link href="/admin/lineup" className="glass-card rounded-xl p-5 hover:border-[#2563eb]/40 transition-all flex items-center gap-4">
+            <div className="w-10 h-10 rounded-lg bg-[#7c3aed]/20 flex items-center justify-center text-[#a78bfa] text-xl">📋</div>
+            <div>
+              <div className="font-semibold text-[#e2e8f0]">スタメン入力</div>
+              <div className="text-xs text-[#64748b]">試合の打順・守備を登録</div>
+            </div>
+          </Link>
+          <Link href="/admin/settings" className="glass-card rounded-xl p-5 hover:border-[#2563eb]/40 transition-all flex items-center gap-4">
+            <div className="w-10 h-10 rounded-lg bg-[#0e7490]/20 flex items-center justify-center text-[#22d3ee] text-xl">⚙️</div>
+            <div>
+              <div className="font-semibold text-[#e2e8f0]">成績設定</div>
+              <div className="text-xs text-[#64748b]">規定打席の係数を変更</div>
+            </div>
+          </Link>
         </div>
       </div>
 

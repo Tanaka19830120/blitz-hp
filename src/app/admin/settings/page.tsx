@@ -1,0 +1,119 @@
+import { prisma } from '@/lib/prisma'
+import { revalidatePath } from 'next/cache'
+import Link from 'next/link'
+
+async function getSetting(key: string, fallback: string): Promise<string> {
+  try {
+    const s = await prisma.setting.findUnique({ where: { key } })
+    return s?.value ?? fallback
+  } catch {
+    return fallback
+  }
+}
+
+async function updateSettings(formData: FormData) {
+  'use server'
+  const raw = String(formData.get('qualPaPerGame') || '2.0')
+  const val = parseFloat(raw)
+  if (!isNaN(val) && val > 0) {
+    await prisma.setting.upsert({
+      where: { key: 'qualPaPerGame' },
+      create: { key: 'qualPaPerGame', value: String(val) },
+      update: { value: String(val) },
+    })
+  }
+  revalidatePath('/stats')
+  revalidatePath('/admin/settings')
+}
+
+export default async function AdminSettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ preset?: string }>
+}) {
+  const sp = await searchParams
+  const savedValue = await getSetting('qualPaPerGame', '2.0')
+  // If a preset link was clicked, pre-fill with that value (but don't save yet)
+  const displayValue = sp.preset ?? savedValue
+
+  const PRESETS = [
+    { label: '1.5（緩め）', value: '1.5' },
+    { label: '2.0（標準）', value: '2.0' },
+    { label: '2.5（厳しめ）', value: '2.5' },
+    { label: '3.1（NPB）', value: '3.1' },
+  ]
+
+  return (
+    <div className="pt-16 max-w-2xl mx-auto px-4 py-12">
+      <div className="flex items-center gap-4 mb-8">
+        <Link href="/admin" className="text-[#64748b] hover:text-[#94a3b8]">← 管理</Link>
+        <h1 className="text-2xl font-black text-[#e2e8f0]">成績設定</h1>
+      </div>
+
+      <div className="glass-card rounded-2xl p-6 mb-4">
+        <h2 className="text-sm font-bold text-[#60a5fa] mb-1">規定打席の係数</h2>
+        <p className="text-xs text-[#64748b] mb-5 leading-relaxed">
+          規定打席 ＝ 総試合数 × 係数。この値以上の打席数がある選手が「規定到達者」として扱われます。<br />
+          プロ野球(NPB)は 3.1、アマチュアは 2.0〜2.5 が一般的。
+        </p>
+
+        {/* Preset links */}
+        <div className="flex flex-wrap gap-2 mb-5">
+          <span className="text-xs text-[#475569] self-center">プリセット：</span>
+          {PRESETS.map(({ label, value }) => (
+            <Link
+              key={value}
+              href={`/admin/settings?preset=${value}`}
+              className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
+                displayValue === value
+                  ? 'bg-[#2563eb] border-[#2563eb] text-white'
+                  : 'border-[#1e3a5f] text-[#64748b] hover:border-[#2563eb]/50 hover:text-[#94a3b8]'
+              }`}
+            >
+              {label}
+            </Link>
+          ))}
+        </div>
+
+        <form action={updateSettings}>
+          <div className="flex items-end gap-4 mb-4">
+            <div className="flex-1">
+              <label className="block text-xs text-[#64748b] mb-1.5">係数（PA / 試合）</label>
+              <input
+                type="number"
+                name="qualPaPerGame"
+                step="0.1"
+                min="0.1"
+                max="10"
+                defaultValue={displayValue}
+                required
+                className="text-2xl font-black text-center"
+              />
+            </div>
+            <div className="text-[#475569] text-sm pb-3">PA / 試合</div>
+          </div>
+          {savedValue !== displayValue && (
+            <p className="text-xs text-[#fbbf24] mb-3">
+              ⚠ 現在の保存値は {savedValue} です。「保存」を押すと反映されます。
+            </p>
+          )}
+          <button type="submit" className="btn-primary w-full py-2.5">
+            保存する
+          </button>
+        </form>
+      </div>
+
+      {/* 説明 */}
+      <div className="glass-card rounded-xl p-4 text-xs text-[#64748b] space-y-1">
+        <div className="flex justify-between">
+          <span>現在の保存値</span>
+          <span className="text-[#60a5fa] font-bold">{savedValue} PA/試合</span>
+        </div>
+        <div className="flex justify-between">
+          <span>例）試合数 20試合 × {savedValue} =</span>
+          <span className="text-[#94a3b8] font-bold">{Math.floor(20 * parseFloat(savedValue))} 打席以上で規定到達</span>
+        </div>
+      </div>
+    </div>
+  )
+}

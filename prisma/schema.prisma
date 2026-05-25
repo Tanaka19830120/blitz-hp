@@ -29,6 +29,7 @@ enum GameType {
   REGULAR
   PRACTICE
   TOURNAMENT
+  EVENT
 }
 
 model User {
@@ -39,11 +40,14 @@ model User {
   role      Role     @default(PLAYER)
   number    Int?
   position  String?
+  photoUrl  String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  attendances Attendance[]
-  gameStats   GameStat[]
+  attendances   Attendance[]
+  gameStats     GameStat[]
+  pitchingStats PitchingStat[]
+  lineups       Lineup[]
 }
 
 model Schedule {
@@ -60,6 +64,7 @@ model Schedule {
 
   attendances Attendance[]
   game        Game?
+  lineups     Lineup[]
 }
 
 model Attendance {
@@ -82,28 +87,78 @@ model Game {
   opponentScore Int
   result        GameResult
   note          String?
+  inningScores  String?    // JSON: {"blitz":[0,1,2],"opponent":[1,0,0]}
+  teamsOneId    String?    @unique
   createdAt     DateTime   @default(now())
   scheduleId    String     @unique
 
-  schedule Schedule  @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
-  stats    GameStat[]
+  schedule      Schedule       @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  stats         GameStat[]
+  pitchingStats PitchingStat[]
 }
 
-model GameStat {
-  id           String  @id @default(cuid())
-  atBats       Int     @default(0)
-  hits         Int     @default(0)
-  rbi          Int     @default(0)
-  runs         Int     @default(0)
-  strikeouts   Int     @default(0)
-  walks        Int     @default(0)
-  position     String?
-  battingOrder Int?
-  userId       String
-  gameId       String
+model PitchingStat {
+  id          String  @id @default(cuid())
+  decision    String? // 勝・負・S・H・null
+  innings     String  @default("0")  // 例: "5回0/3"
+  pitches     Int     @default(0)
+  runsAllowed Int     @default(0)
+  earnedRuns  Int     @default(0)
+  hitsAllowed Int     @default(0)
+  strikeouts  Int     @default(0)
+  walks       Int     @default(0)
+  userId      String
+  gameId      String
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
 
   @@unique([userId, gameId])
+}
+
+model GameStat {
+  id               String  @id @default(cuid())
+  atBats           Int     @default(0)
+  hits             Int     @default(0)
+  doubles          Int     @default(0)
+  triples          Int     @default(0)
+  homeRuns         Int     @default(0)
+  rbi              Int     @default(0)
+  runs             Int     @default(0)
+  stolenBases      Int     @default(0)
+  strikeouts       Int     @default(0)
+  walks            Int     @default(0)
+  hitByPitch       Int     @default(0)
+  sacrificeBunts   Int     @default(0)
+  sacrificeFlies   Int     @default(0)
+  plateAppearances Int     @default(0)
+  position         String?
+  battingOrder     Int?
+  userId           String
+  gameId           String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gameId])
+}
+
+model Setting {
+  key   String @id
+  value String
+}
+
+model Lineup {
+  id           String   @id @default(cuid())
+  battingOrder Int?
+  position     String?
+  isDH         Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  userId       String
+  scheduleId   String
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  schedule Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, scheduleId])
 }
