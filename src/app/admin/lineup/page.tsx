@@ -64,11 +64,8 @@ async function saveLineup(formData: FormData) {
   revalidatePath('/schedule')
 }
 
-async function sendLineLineup(formData: FormData) {
+async function sendLineLineup(scheduleId: string, senderInfo: string) {
   'use server'
-  const scheduleId    = String(formData.get('scheduleId'))
-  const senderName    = String(formData.get('senderName')   || '').trim()
-  const senderNumber  = String(formData.get('senderNumber') || '').trim()
 
   const schedule = await prisma.schedule.findUnique({
     where:  { id: scheduleId },
@@ -81,8 +78,8 @@ async function sendLineLineup(formData: FormData) {
   })
 
   // 送信者フッター
-  const senderFooter = senderName
-    ? `\n━━━━━━━━━━━━\n📨 送信者: ${senderNumber ? `#${senderNumber} ` : ''}${senderName}`
+  const senderFooter = senderInfo.trim()
+    ? `\n━━━━━━━━━━━━\n📨 送信者: ${senderInfo.trim()}`
     : ''
 
   // JSON形式が存在すればそちらを使用

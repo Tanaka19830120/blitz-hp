@@ -4,7 +4,7 @@ import { useTransition, useState } from 'react'
 
 interface Props {
   scheduleId:          string
-  sendAction:          (fd: FormData) => Promise<void>
+  sendAction:          (scheduleId: string, senderInfo: string) => Promise<void>
   defaultSenderNumber: string
   defaultSenderName:   string
 }
@@ -16,12 +16,14 @@ export function LineSendButton({ scheduleId, sendAction, defaultSenderNumber, de
   const [senderName,   setSenderName]   = useState(defaultSenderName)
 
   function handleClick() {
-    const fd = new FormData()
-    fd.append('scheduleId',   scheduleId)
-    fd.append('senderName',   senderName.trim())
-    fd.append('senderNumber', senderNumber.trim())
+    // "#7 田中" のような文字列にまとめてサーバーに渡す
+    const senderInfo = [
+      senderNumber.trim() ? `#${senderNumber.trim()}` : '',
+      senderName.trim(),
+    ].filter(Boolean).join(' ')
+
     startTransition(async () => {
-      await sendAction(fd)
+      await sendAction(scheduleId, senderInfo)
       setStatus('sent')
       setTimeout(() => setStatus('idle'), 4000)
     })
