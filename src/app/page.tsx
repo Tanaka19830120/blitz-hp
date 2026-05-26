@@ -1,10 +1,11 @@
 import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
 import Image from 'next/image'
+import { getGameTypeLabels } from '@/lib/settings'
 
 async function getHomeData() {
   const now = new Date()
-  const [games, nextSchedule, totalGames] = await Promise.all([
+  const [games, nextSchedule, totalGames, gameTypeLabels] = await Promise.all([
     prisma.game.findMany({
       take: 6,
       orderBy: { schedule: { date: 'desc' } },
@@ -18,11 +19,12 @@ async function getHomeData() {
       by: ['result'],
       _count: { result: true },
     }),
+    getGameTypeLabels(),
   ])
   const wins = totalGames.find((g) => g.result === 'WIN')?._count.result ?? 0
   const losses = totalGames.find((g) => g.result === 'LOSE')?._count.result ?? 0
   const draws = totalGames.find((g) => g.result === 'DRAW')?._count.result ?? 0
-  return { games, nextSchedule, wins, losses, draws }
+  return { games, nextSchedule, wins, losses, draws, gameTypeLabels }
 }
 
 function formatDate(date: Date) {
@@ -38,7 +40,7 @@ function daysUntil(date: Date) {
 }
 
 export default async function HomePage() {
-  const { games, nextSchedule, wins, losses, draws } = await getHomeData()
+  const { games, nextSchedule, wins, losses, draws, gameTypeLabels } = await getHomeData()
   const total = wins + losses + draws
 
   return (
@@ -97,7 +99,6 @@ export default async function HomePage() {
                 </div>
                 <div>
                   <div className="text-[#60a5fa] text-xs font-bold tracking-[0.4em] uppercase">Softball Team</div>
-                  <div className="text-[#475569] text-xs tracking-widest mt-0.5">SDソフトボールリーグ</div>
                 </div>
               </div>
 
@@ -123,12 +124,7 @@ export default async function HomePage() {
                 <span className="text-[#64748b] text-xs tracking-[0.3em] uppercase font-semibold">Est. 2019</span>
               </div>
 
-              <p className="text-[#94a3b8] text-lg md:text-xl mb-10 leading-relaxed">
-                熱く、鋭く、打ち勝つ。<br />
-                <span className="text-[#60a5fa]">仲間と共に頂点を目指す。</span>
-              </p>
-
-              <div className="flex flex-wrap gap-4">
+              <div className="flex flex-wrap gap-4 mt-6">
                 <Link href="/schedule" className="btn-primary text-base px-6 py-3">
                   📅 日程・出欠を確認
                 </Link>
@@ -205,7 +201,7 @@ export default async function HomePage() {
             <div>
               <div className="flex items-center gap-3 mb-2">
                 <span className="badge-pending">
-                  {nextSchedule.type === 'REGULAR' ? '公式戦' : nextSchedule.type === 'TOURNAMENT' ? 'トーナメント' : nextSchedule.type === 'EVENT' ? 'イベント' : '練習試合'}
+                  {gameTypeLabels[nextSchedule.type] ?? nextSchedule.type}
                 </span>
                 <span className="text-[#60a5fa] font-bold text-sm">
                   {daysUntil(nextSchedule.date) === 0 ? '本日' : `${daysUntil(nextSchedule.date)}日後`}

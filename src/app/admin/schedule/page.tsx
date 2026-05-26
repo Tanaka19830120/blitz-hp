@@ -2,26 +2,41 @@ import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
+import { getMasterList, getGameTypeLabels } from '@/lib/settings'
+
+export const dynamic = 'force-dynamic'
 
 async function createSchedule(formData: FormData) {
   'use server'
   const date = String(formData.get('date'))
   const dateTime = new Date(`${date}T00:00:00`)
 
-  const meetTime = String(formData.get('meetTime') || '').trim()
+  const meetTime  = String(formData.get('meetTime')  || '').trim()
   const startTime = String(formData.get('startTime') || '').trim()
-  const typeRaw = String(formData.get('type') || 'PRACTICE')
+  const typeRaw   = String(formData.get('type') || 'PRACTICE')
   const type = (['REGULAR', 'PRACTICE', 'TOURNAMENT', 'EVENT'].includes(typeRaw) ? typeRaw : 'REGULAR') as 'REGULAR' | 'PRACTICE' | 'TOURNAMENT' | 'EVENT'
+
+  // 対戦相手: selectValue か customValue を使用
+  const opponentSelect = String(formData.get('opponentSelect') || '').trim()
+  const opponentCustom = String(formData.get('opponentCustom') || '').trim()
+  const opponent = (opponentSelect === '__custom__' ? opponentCustom : opponentSelect) || opponentCustom
+
+  // 球場: selectValue か customValue を使用
+  const locationSelect = String(formData.get('locationSelect') || '').trim()
+  const locationCustom = String(formData.get('locationCustom') || '').trim()
+  const location = (locationSelect === '__custom__' ? locationCustom : locationSelect) || locationCustom
+
+  if (!opponent || !location) return
 
   await prisma.schedule.create({
     data: {
       date: dateTime,
-      opponent: String(formData.get('opponent')),
-      location: String(formData.get('location')),
+      opponent,
+      location,
       type,
-      meetTime: meetTime || null,
+      meetTime:  meetTime  || null,
       startTime: startTime || null,
-      note: String(formData.get('note') || '') || null,
+      note:      String(formData.get('note') || '') || null,
     },
   })
   revalidatePath('/schedule')
@@ -38,26 +53,16 @@ async function deleteSchedule(formData: FormData) {
 }
 
 export default async function AdminSchedulePage() {
-  const [schedules, opponentList, locationList] = await Promise.all([
+  const [schedules, opponents, locations, gameTypeLabels] = await Promise.all([
     prisma.schedule.findMany({
       orderBy: { date: 'desc' },
       take: 30,
       include: { game: { select: { id: true } } },
     }),
-    prisma.schedule.findMany({
-      select: { opponent: true },
-      distinct: ['opponent'],
-      orderBy: { opponent: 'asc' },
-    }),
-    prisma.schedule.findMany({
-      select: { location: true },
-      distinct: ['location'],
-      orderBy: { location: 'asc' },
-    }),
+    getMasterList('opponentMaster'),
+    getMasterList('locationMaster'),
+    getGameTypeLabels(),
   ])
-
-  const opponents = opponentList.map((s) => s.opponent).filter(Boolean)
-  const locations = locationList.map((s) => s.location).filter(Boolean)
 
   return (
     <div className="pt-16 max-w-4xl mx-auto px-4 py-12">
@@ -65,14 +70,6 @@ export default async function AdminSchedulePage() {
         <Link href="/admin" className="text-[#64748b] hover:text-[#94a3b8]">← 管理</Link>
         <h1 className="text-2xl font-black text-[#e2e8f0]">日程を追加</h1>
       </div>
-
-      {/* datalists for autocomplete */}
-      <datalist id="opponents-list">
-        {opponents.map((o) => <option key={o} value={o} />)}
-      </datalist>
-      <datalist id="locations-list">
-        {locations.map((l) => <option key={l} value={l} />)}
-      </datalist>
 
       <div className="glass-card rounded-2xl p-6 mb-8">
         <form action={createSchedule} className="grid gap-4 sm:grid-cols-2">
@@ -84,40 +81,92 @@ export default async function AdminSchedulePage() {
             <div>
               <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">試合種別 *</label>
               <select name="type">
-                <option value="REGULAR">公式戦（SDリーグ）</option>
-                <option value="TOURNAMENT">トーナメント・大会</option>
-                <option value="PRACTICE">練習試合</option>
-                <option value="EVENT">イベント（BBQ・レクなど）</option>
+                <option value="REGULAR">{gameTypeLabels.REGULAR}</option>
+                <option value="TOURNAMENT">{gameTypeLabels.TOURNAMENT}</option>
+                <option value="PRACTICE">{gameTypeLabels.PRACTICE}</option>
+                <option value="EVENT">{gameTypeLabels.EVENT}</option>
               </select>
             </div>
           </div>
 
+          {/* 対戦相手 */}
           <div>
             <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">対戦相手 *</label>
-            <input
-              type="text"
-              name="opponent"
-              required
-              placeholder="チーム名"
-              list="opponents-list"
-            />
-            {opponents.length > 0 && (
-              <p className="text-[10px] text-[#475569] mt-1">過去の対戦相手から選択可</p>
+            {opponents.length > 0 ? (
+              <>
+                <select name="opponentSelect" className="mb-2">
+                  <option value="">── 選択してください ──</option>
+                  {opponents.map(o => <option key={o} value={o}>{o}</option>)}
+                  <option value="__custom__">その他（直接入力）...</option>
+                </select>
+                <input
+                  type="text"
+                  name="opponentCustom"
+                  placeholder="マスタにない場合は直接入力"
+                  className="text-sm"
+                />
+                <p className="text-[10px] text-[#475569] mt-1">
+                  新しいチームを追加するには
+                  <Link href="/admin/masters" className="text-[#60a5fa] ml-1 hover:underline">マスタ管理</Link>
+                  へ
+                </p>
+              </>
+            ) : (
+              <>
+                <input
+                  type="text"
+                  name="opponentCustom"
+                  required
+                  placeholder="チーム名"
+                />
+                <p className="text-[10px] text-[#fbbf24] mt-1">
+                  ⚠ マスタが空です。
+                  <Link href="/admin/masters" className="text-[#60a5fa] ml-1 hover:underline">マスタ管理</Link>
+                  で対戦相手を登録するとプルダウンで選べます。
+                </p>
+              </>
             )}
           </div>
+
+          {/* 球場 */}
           <div>
             <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">場所 *</label>
-            <input
-              type="text"
-              name="location"
-              required
-              placeholder="球場名"
-              list="locations-list"
-            />
-            {locations.length > 0 && (
-              <p className="text-[10px] text-[#475569] mt-1">過去の場所から選択可</p>
+            {locations.length > 0 ? (
+              <>
+                <select name="locationSelect" className="mb-2">
+                  <option value="">── 選択してください ──</option>
+                  {locations.map(l => <option key={l} value={l}>{l}</option>)}
+                  <option value="__custom__">その他（直接入力）...</option>
+                </select>
+                <input
+                  type="text"
+                  name="locationCustom"
+                  placeholder="マスタにない場合は直接入力"
+                  className="text-sm"
+                />
+                <p className="text-[10px] text-[#475569] mt-1">
+                  新しい球場を追加するには
+                  <Link href="/admin/masters" className="text-[#60a5fa] ml-1 hover:underline">マスタ管理</Link>
+                  へ
+                </p>
+              </>
+            ) : (
+              <>
+                <input
+                  type="text"
+                  name="locationCustom"
+                  required
+                  placeholder="球場名"
+                />
+                <p className="text-[10px] text-[#fbbf24] mt-1">
+                  ⚠ マスタが空です。
+                  <Link href="/admin/masters" className="text-[#60a5fa] ml-1 hover:underline">マスタ管理</Link>
+                  で球場を登録するとプルダウンで選べます。
+                </p>
+              </>
             )}
           </div>
+
           <div>
             <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">集合時間</label>
             <input type="time" name="meetTime" />
@@ -155,7 +204,7 @@ export default async function AdminSchedulePage() {
                 s.type === 'TOURNAMENT' ? 'text-[#fbbf24]' :
                 s.type === 'EVENT' ? 'text-[#a78bfa]' : 'text-[#94a3b8]'
               }`}>
-                {s.type === 'REGULAR' ? '公式戦' : s.type === 'TOURNAMENT' ? '大会' : s.type === 'EVENT' ? 'イベント' : '練習'}
+                {gameTypeLabels[s.type] ?? s.type}
               </span>
               {!s.game && (
                 <form action={deleteSchedule}>

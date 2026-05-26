@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
+import { sendToLineGroup, buildGameResult } from '@/lib/line'
 
 async function saveGameResult(formData: FormData) {
   'use server'
@@ -134,6 +135,20 @@ async function saveGameResult(formData: FormData) {
     }
   }
 
+  // LINE通知（チェックボックスが ON の場合のみ）
+  if (formData.get('sendLine') === 'on') {
+    const schedule = await prisma.schedule.findUnique({ where: { id: scheduleId } })
+    if (schedule) {
+      const msg = buildGameResult(schedule, {
+        ourScore,
+        opponentScore,
+        result,
+        note: String(formData.get('note') || '') || null,
+      })
+      await sendToLineGroup(msg)
+    }
+  }
+
   revalidatePath('/results')
   revalidatePath('/stats')
   revalidatePath('/')
@@ -146,6 +161,8 @@ export default async function AdminGamePage({
   searchParams: Promise<{ scheduleId?: string }>
 }) {
   const sp = await searchParams
+
+  const lineConfigured = !!(process.env.LINE_CHANNEL_ACCESS_TOKEN && process.env.LINE_GROUP_ID)
 
   const [schedules, allPlayers] = await Promise.all([
     prisma.schedule.findMany({
@@ -427,6 +444,13 @@ export default async function AdminGamePage({
                 </table>
               </div>
             </div>
+
+            {lineConfigured && (
+              <label className="flex items-center gap-2 text-sm text-[#22c55e] cursor-pointer select-none">
+                <input type="checkbox" name="sendLine" defaultChecked className="w-4 h-4 accent-[#22c55e]" />
+                保存後にLINEに試合結果を送信する
+              </label>
+            )}
 
             <button type="submit" className="btn-primary w-full py-3 text-base">
               結果を保存

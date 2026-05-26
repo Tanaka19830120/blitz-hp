@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/auth'
 import { revalidatePath } from 'next/cache'
+import { getGameTypeLabels } from '@/lib/settings'
 
 async function updateAttendance(formData: FormData) {
   'use server'
@@ -38,16 +39,19 @@ export default async function SchedulePage() {
   const session = await auth()
   const now = new Date()
 
-  const schedules = await prisma.schedule.findMany({
-    where: { date: { gte: new Date(now.getFullYear(), now.getMonth(), 1) } },
-    orderBy: { date: 'asc' },
-    include: {
-      attendances: {
-        include: { user: { select: { id: true, name: true } } },
+  const [schedules, gameTypeLabels] = await Promise.all([
+    prisma.schedule.findMany({
+      where: { date: { gte: new Date(now.getFullYear(), now.getMonth(), 1) } },
+      orderBy: { date: 'asc' },
+      include: {
+        attendances: {
+          include: { user: { select: { id: true, name: true } } },
+        },
       },
-    },
-    take: 20,
-  })
+      take: 20,
+    }),
+    getGameTypeLabels(),
+  ])
 
   return (
     <div className="pt-16 max-w-7xl mx-auto px-4 py-12">
@@ -85,7 +89,7 @@ export default async function SchedulePage() {
                               ? 'text-[#a78bfa] border-[#7c3aed]/40 bg-[#7c3aed]/10'
                               : 'text-[#94a3b8] border-[#1e3a5f] bg-[#1e3a5f]/20'
                       }`}>
-                        {schedule.type === 'REGULAR' ? '公式戦' : schedule.type === 'TOURNAMENT' ? 'トーナメント' : schedule.type === 'EVENT' ? 'イベント' : '練習試合'}
+                        {gameTypeLabels[schedule.type] ?? schedule.type}
                       </span>
                       {isPast && <span className="text-xs text-[#64748b] border border-[#1e3a5f] px-2 py-0.5 rounded">終了</span>}
                     </div>
