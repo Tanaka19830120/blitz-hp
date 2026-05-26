@@ -140,6 +140,75 @@ export function buildLineup(
   ].filter(Boolean).join('\n')
 }
 
+/** スタメン（前半/後半形式） */
+export function buildLineupFromJson(
+  schedule: {
+    date: Date; opponent: string; location: string
+    meetTime?: string | null; startTime?: string | null
+  },
+  data: {
+    slots:        Array<{ first: { playerId: string; position: string }; second: { playerId: string; position: string } }>
+    fpSlots:      Array<{ playerId: string; position: string }>
+    umpireFirst:  string
+    umpireSecond: string
+    note:         string
+  },
+  players: Array<{ id: string; name: string; number: number | null }>
+): string {
+  const pm = new Map(players.map(p => [p.id, p]))
+
+  const lines: (string | null)[] = [
+    `📋【BLITZ】スタメン`,
+    `${fmt(schedule.date)} vs ${schedule.opponent}`,
+    `📍 ${schedule.location}`,
+    schedule.meetTime  ? `🕐 集合 ${schedule.meetTime}`    : null,
+    schedule.startTime ? `▶ 試合開始 ${schedule.startTime}` : null,
+    `━━━━━━━━━━━━`,
+  ]
+
+  for (let i = 0; i < data.slots.length; i++) {
+    const s  = data.slots[i]
+    const p1 = pm.get(s.first.playerId)
+    if (!p1) continue
+    const pos1 = s.first.position === 'DP' ? 'DP(打)' : s.first.position
+    let line = `${i + 1}番 ${pos1 ? pos1 + ' ' : ''}${p1.name}`
+
+    // 後半で別の選手に交代
+    if (s.second.playerId && s.second.playerId !== s.first.playerId) {
+      const p2   = pm.get(s.second.playerId)
+      const pos2 = s.second.position === 'DP' ? 'DP(打)' : s.second.position
+      if (p2) line += ` → 後半: ${pos2 ? pos2 + ' ' : ''}${p2.name}`
+    } else if (s.second.playerId === s.first.playerId && s.second.position && s.second.position !== s.first.position) {
+      // 同じ選手でポジション変更
+      const pos2 = s.second.position === 'DP' ? 'DP(打)' : s.second.position
+      line += ` → 後半: ${pos2}`
+    }
+    lines.push(line)
+  }
+
+  // FP
+  const validFp = data.fpSlots.filter(f => f.playerId && f.position)
+  if (validFp.length > 0) {
+    const fpStr = validFp.map(f => {
+      const p = pm.get(f.playerId)
+      return p ? `${p.name}(${f.position})` : ''
+    }).filter(Boolean).join('、')
+    if (fpStr) lines.push(`━━━━━━━━━━━━\nFP（守るだけ）: ${fpStr}`)
+  }
+
+  // 審判
+  const uf = data.umpireFirst  ? pm.get(data.umpireFirst)?.name  : ''
+  const us = data.umpireSecond ? pm.get(data.umpireSecond)?.name : ''
+  if (uf || us) {
+    const parts = [...(uf ? [`前半: ${uf}`] : []), ...(us ? [`後半: ${us}`] : [])]
+    lines.push(`━━━━━━━━━━━━\n⚖️ 審判 ${parts.join(' / ')}`)
+  }
+
+  if (data.note?.trim()) lines.push(`━━━━━━━━━━━━\n📝 ${data.note}`)
+
+  return lines.filter(Boolean).join('\n')
+}
+
 /** 試合結果 */
 export function buildGameResult(
   schedule: { date: Date; opponent: string },
