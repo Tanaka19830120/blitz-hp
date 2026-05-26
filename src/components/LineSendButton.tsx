@@ -1,33 +1,19 @@
 'use client'
 
-import { useTransition, useState, useEffect } from 'react'
+import { useTransition, useState } from 'react'
 
 interface Props {
-  scheduleId: string
-  sendAction: (fd: FormData) => Promise<void>
+  scheduleId:          string
+  sendAction:          (fd: FormData) => Promise<void>
+  defaultSenderNumber: string
+  defaultSenderName:   string
 }
 
-export function LineSendButton({ scheduleId, sendAction }: Props) {
+export function LineSendButton({ scheduleId, sendAction, defaultSenderNumber, defaultSenderName }: Props) {
   const [isPending, startTransition] = useTransition()
-  const [status, setStatus] = useState<'idle' | 'sent'>('idle')
-  const [senderNumber, setSenderNumber] = useState('')
-  const [senderName,   setSenderName]   = useState('')
-
-  // localStorage から前回の送信者を復元
-  useEffect(() => {
-    setSenderNumber(localStorage.getItem('lineSenderNumber') ?? '')
-    setSenderName(localStorage.getItem('lineSenderName')   ?? '')
-  }, [])
-
-  function handleChange(field: 'number' | 'name', val: string) {
-    if (field === 'number') {
-      setSenderNumber(val)
-      localStorage.setItem('lineSenderNumber', val)
-    } else {
-      setSenderName(val)
-      localStorage.setItem('lineSenderName', val)
-    }
-  }
+  const [status,       setStatus]       = useState<'idle' | 'sent'>('idle')
+  const [senderNumber, setSenderNumber] = useState(defaultSenderNumber)
+  const [senderName,   setSenderName]   = useState(defaultSenderName)
 
   function handleClick() {
     const fd = new FormData()
@@ -61,14 +47,14 @@ export function LineSendButton({ scheduleId, sendAction }: Props) {
               type="text"
               placeholder="#番号"
               value={senderNumber}
-              onChange={e => handleChange('number', e.target.value)}
+              onChange={e => setSenderNumber(e.target.value)}
               className={`${inputCls} w-16 text-center`}
             />
             <input
               type="text"
               placeholder="名前"
               value={senderName}
-              onChange={e => handleChange('name', e.target.value)}
+              onChange={e => setSenderName(e.target.value)}
               className={`${inputCls} flex-1`}
             />
           </div>

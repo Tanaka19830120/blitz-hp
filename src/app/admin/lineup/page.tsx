@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { sendToLineGroup, buildLineupFromJson } from '@/lib/line'
 import { LineupEditor, type LineupData } from '@/components/LineupEditor'
 import { LineSendButton } from '@/components/LineSendButton'
+import { auth } from '@/auth'
 
 // ─── 旧形式（英語）→ 日本語の守備位置マッピング ───────────────────
 const POS_TO_JA: Record<string, string> = {
@@ -114,6 +115,22 @@ export default async function AdminLineupPage({
   searchParams: Promise<{ scheduleId?: string }>
 }) {
   const sp = await searchParams
+
+  // ログインユーザーの背番号・名前を取得（送信者欄の初期値）
+  const session = await auth()
+  let defaultSenderNumber = ''
+  let defaultSenderName   = ''
+  if (session?.user?.id) {
+    const me = await prisma.user.findUnique({
+      where:  { id: session.user.id },
+      select: { name: true, number: true },
+    })
+    if (me) {
+      defaultSenderNumber = me.number != null ? String(me.number) : ''
+      defaultSenderName   = me.name ?? ''
+    }
+  }
+
   const lineConfigured = !!(process.env.LINE_CHANNEL_ACCESS_TOKEN &&
     (process.env.LINE_GROUP_ID ||
       await prisma.setting.findUnique({ where: { key: 'detectedLineGroupId' } }).then(s => s?.value ?? '').catch(() => '')))
@@ -289,7 +306,12 @@ export default async function AdminLineupPage({
 
               {/* LINE送信 */}
               {lineConfigured && hasAnyLineup && (
-                <LineSendButton scheduleId={selectedSchedule.id} sendAction={sendLineLineup} />
+                <LineSendButton
+                  scheduleId={selectedSchedule.id}
+                  sendAction={sendLineLineup}
+                  defaultSenderNumber={defaultSenderNumber}
+                  defaultSenderName={defaultSenderName}
+                />
               )}
             </div>
           )}

@@ -202,8 +202,11 @@ export function buildLineupFromJson(
     if (fpStr) lines.push(`━━━━━━━━━━━━\nFP（守るだけ）: ${fpStr}`)
   }
 
-  // 審判
-  const validUmpires = (data.umpires ?? []).filter(u => u.playerId)
+  // 審判（前半 → 後半 → 全試合 の順に固定）
+  const halfOrder = ['前半', '後半', '全試合']
+  const validUmpires = (data.umpires ?? [])
+    .filter(u => u.playerId)
+    .sort((a, b) => halfOrder.indexOf(a.half) - halfOrder.indexOf(b.half))
   if (validUmpires.length > 0) {
     const parts = validUmpires.map(u => {
       const name = pm.get(u.playerId)?.name ?? ''
