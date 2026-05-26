@@ -12,7 +12,7 @@ const navLinks = [
   { href: '/results', label: '試合結果' },
   { href: '/stats', label: '成績' },
   { href: '/members', label: 'メンバー' },
-  { href: '/profile', label: 'チーム紹介' },
+  { href: '/profile', label: 'チームプロフィール' },
   { href: '/contact', label: 'お問い合わせ' },
 ]
 

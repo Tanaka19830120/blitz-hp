@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
 import { PROFILE_DEFAULTS, getProfileSetting } from '@/lib/settings'
+import { SaveFormButton } from '@/components/SaveFormButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -109,10 +110,10 @@ export default async function AdminProfilePage() {
           />
         </div>
 
-        {/* SDリーグ過去成績 */}
+        {/* 過去成績 */}
         <div className="glass-card rounded-2xl p-5">
           <label className={labelCls}>
-            SDリーグ 過去成績
+            過去成績
             <span className={hintCls}>1行に「年: 順位」の形式で記入（新しい年を上に）</span>
           </label>
           <textarea
@@ -124,9 +125,7 @@ export default async function AdminProfilePage() {
           />
         </div>
 
-        <button type="submit" className="btn-primary w-full py-2.5">
-          プロフィールを保存
-        </button>
+        <SaveFormButton label="プロフィールを保存" />
       </form>
     </div>
   )

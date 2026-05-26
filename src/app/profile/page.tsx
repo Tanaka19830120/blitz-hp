@@ -118,7 +118,7 @@ export default async function ProfilePage() {
       {/* League records */}
       {records.length > 0 && (
         <div className="glass-card rounded-2xl p-6">
-          <h3 className="text-xs font-bold tracking-[0.3em] text-[#60a5fa] uppercase mb-4">SD リーグ 過去成績</h3>
+          <h3 className="text-xs font-bold tracking-[0.3em] text-[#60a5fa] uppercase mb-4">過去成績</h3>
           <div className="flex flex-wrap gap-4 text-sm">
             {records.map(({ year, result }) => (
               <div key={year} className="glass-card rounded-xl px-4 py-3 text-center min-w-[80px]">

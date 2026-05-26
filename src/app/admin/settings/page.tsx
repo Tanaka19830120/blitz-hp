@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
+import { SaveFormButton } from '@/components/SaveFormButton'
 
 async function getSetting(key: string, fallback: string): Promise<string> {
   try {
@@ -97,9 +98,7 @@ export default async function AdminSettingsPage({
               ⚠ 現在の保存値は {savedValue} です。「保存」を押すと反映されます。
             </p>
           )}
-          <button type="submit" className="btn-primary w-full py-2.5">
-            保存する
-          </button>
+          <SaveFormButton label="保存する" />
         </form>
       </div>
 

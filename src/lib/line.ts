@@ -154,7 +154,14 @@ export function buildLineupFromJson(
   },
   players: Array<{ id: string; name: string; number: number | null }>
 ): string {
-  const pm = new Map(players.map(p => [p.id, p]))
+  // 助っ人（固定4枠）を追加
+  const guestPlayers = [
+    { id: '__guest_1', name: '助っ人1', number: null },
+    { id: '__guest_2', name: '助っ人2', number: null },
+    { id: '__guest_3', name: '助っ人3', number: null },
+    { id: '__guest_4', name: '助っ人4', number: null },
+  ]
+  const pm = new Map([...players, ...guestPlayers].map(p => [p.id, p]))
 
   const lines: (string | null)[] = [
     `📋【BLITZ】スタメン`,

@@ -1,11 +1,19 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useEffect, useRef } from 'react'
 
 type Player = { id: string; name: string; number: number | null }
 
 const POSITIONS       = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右', 'DP']
 const FIELD_POSITIONS = ['投', '捕', '一', '二', '三', '遊', '左', '中', '右']
+
+// 助っ人：固定4枠
+const GUEST_PLAYERS: Player[] = [
+  { id: '__guest_1', name: '助っ人1', number: null },
+  { id: '__guest_2', name: '助っ人2', number: null },
+  { id: '__guest_3', name: '助っ人3', number: null },
+  { id: '__guest_4', name: '助っ人4', number: null },
+]
 
 // 打順1スロット（前半・後半）
 interface HalfEntry { playerId: string; position: string }
@@ -18,6 +26,7 @@ export interface LineupData {
   slots:    OrderSlot[]
   fpSlots:  FpSlot[]
   umpires:  UmpireSlot[]   // 最大4人
+  bench:    string[]       // ベンチ入り選手 (playerId[])
   note:     string
 }
 
@@ -30,9 +39,12 @@ interface Props {
 
 const empty = (): HalfEntry => ({ playerId: '', position: '' })
 
+type SaveState = 'idle' | 'saving' | 'saved'
 
 export function LineupEditor({ players, scheduleId, initialData, saveAction }: Props) {
   const [isPending, startTransition] = useTransition()
+  const [saveState, setSaveState] = useState<SaveState>('idle')
+  const prevPendingRef = useRef(false)
 
   const [slots, setSlots] = useState<OrderSlot[]>(() => {
     const len = Math.max(9, initialData.slots.length)
@@ -42,40 +54,26 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
   })
   const [fpSlots,  setFpSlots]  = useState<FpSlot[]>(initialData.fpSlots)
   const [umpires,  setUmpires]  = useState<UmpireSlot[]>(initialData.umpires ?? [])
+  const [bench,    setBench]    = useState<string[]>(initialData.bench ?? [])
   const [note,     setNote]     = useState(initialData.note)
 
-  // ─── 使用可能ポジション計算（他のスロットで使用済みを除外） ──────
-  function availableFirstPos(slotIdx: number): string[] {
-    const taken = new Set<string>()
-    slots.forEach((s, i) => { if (i !== slotIdx && s.first.position && s.first.position !== 'DP') taken.add(s.first.position) })
-    fpSlots.forEach(f => { if (f.position) taken.add(f.position) })
-    const cur = slots[slotIdx].first.position
-    return POSITIONS.filter(p => p === 'DP' || p === cur || !taken.has(p))
-  }
+  // isPending が true → false になったタイミングで「保存しました」表示
+  useEffect(() => {
+    if (prevPendingRef.current && !isPending && saveState === 'saving') {
+      setSaveState('saved')
+      const t = setTimeout(() => setSaveState('idle'), 3000)
+      return () => clearTimeout(t)
+    }
+    prevPendingRef.current = isPending
+  }, [isPending, saveState])
 
-  function availableSecondPos(slotIdx: number): string[] {
-    const taken = new Set<string>()
-    slots.forEach((s, i) => {
-      if (i !== slotIdx) {
-        const p = s.second.playerId ? s.second.position : s.first.position
-        if (p && p !== 'DP') taken.add(p)
-      }
-    })
-    fpSlots.forEach(f => { if (f.position) taken.add(f.position) })
-    const cur = slots[slotIdx].second.position
-    return POSITIONS.filter(p => p === 'DP' || p === cur || !taken.has(p))
-  }
-
-  function availableFpPos(fpIdx: number): string[] {
-    const taken = new Set<string>()
-    slots.forEach(s => {
-      if (s.first.position  && s.first.position  !== 'DP') taken.add(s.first.position)
-      if (s.second.playerId && s.second.position && s.second.position !== 'DP') taken.add(s.second.position)
-    })
-    fpSlots.forEach((f, i) => { if (i !== fpIdx && f.position) taken.add(f.position) })
-    const cur = fpSlots[fpIdx]?.position
-    return FIELD_POSITIONS.filter(p => p === cur || !taken.has(p))
-  }
+  // ─── ポジション選択肢（全件表示・入れ替えは update 側で処理） ──────
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  function availableFirstPos(_idx: number)  { return POSITIONS }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  function availableSecondPos(_idx: number) { return POSITIONS }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  function availableFpPos(_idx: number)     { return FIELD_POSITIONS }
 
   // ─── 前半選手変更（打順内でスワップ） ─────────────────────────
   function changeFirst(idx: number, newId: string) {
@@ -87,6 +85,8 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
     next.forEach((s, i) => { if (i !== idx && s.second.playerId === newId) s.second.playerId = '' })
     next[idx].first.playerId = newId
     const nextFp = fpSlots.map(f => f.playerId === newId ? { ...f, playerId: '' } : { ...f })
+    // ベンチからも除去
+    setBench(prev => prev.filter(id => id !== newId))
     setSlots(next); setFpSlots(nextFp)
   }
 
@@ -99,14 +99,52 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
     next.forEach((s, i) => { if (i !== idx && s.first.playerId === newId) s.first.playerId = '' })
     next[idx].second.playerId = newId
     const nextFp = fpSlots.map(f => f.playerId === newId ? { ...f, playerId: '' } : { ...f })
+    setBench(prev => prev.filter(id => id !== newId))
     setSlots(next); setFpSlots(nextFp)
   }
 
+  // ─── ポジション更新（競合があれば旧ポジションと入れ替え） ───────
   function updateFirstPos(idx: number, pos: string) {
-    setSlots(prev => prev.map((s, i) => i === idx ? { ...s, first: { ...s.first, position: pos } } : s))
+    const oldPos = slots[idx].first.position
+    if (oldPos === pos) return
+    const ns = slots.map(s => ({ first: { ...s.first }, second: { ...s.second } }))
+    const nf = fpSlots.map(f => ({ ...f }))
+    if (pos && pos !== 'DP') {
+      // 前半スロットに同じPOSがあれば入れ替え
+      for (let i = 0; i < ns.length; i++) {
+        if (i !== idx && ns[i].first.position === pos) ns[i].first.position = oldPos
+      }
+      // 後半スロットに同じPOSがあれば入れ替え
+      for (let i = 0; i < ns.length; i++) {
+        if (i !== idx && ns[i].second.playerId && ns[i].second.position === pos) ns[i].second.position = oldPos
+      }
+      // FPスロットに同じPOSがあれば入れ替え
+      for (let i = 0; i < nf.length; i++) {
+        if (nf[i].position === pos) nf[i].position = oldPos
+      }
+    }
+    ns[idx].first.position = pos
+    setSlots(ns); setFpSlots(nf)
   }
+
   function updateSecondPos(idx: number, pos: string) {
-    setSlots(prev => prev.map((s, i) => i === idx ? { ...s, second: { ...s.second, position: pos } } : s))
+    const oldPos = slots[idx].second.position
+    if (oldPos === pos) return
+    const ns = slots.map(s => ({ first: { ...s.first }, second: { ...s.second } }))
+    const nf = fpSlots.map(f => ({ ...f }))
+    if (pos && pos !== 'DP') {
+      for (let i = 0; i < ns.length; i++) {
+        if (i !== idx && ns[i].first.position === pos) ns[i].first.position = oldPos
+      }
+      for (let i = 0; i < ns.length; i++) {
+        if (i !== idx && ns[i].second.playerId && ns[i].second.position === pos) ns[i].second.position = oldPos
+      }
+      for (let i = 0; i < nf.length; i++) {
+        if (nf[i].position === pos) nf[i].position = oldPos
+      }
+    }
+    ns[idx].second.position = pos
+    setSlots(ns); setFpSlots(nf)
   }
 
   function addSlot()       { setSlots(prev => [...prev, { first: empty(), second: empty() }]) }
@@ -126,10 +164,27 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
       first:  s.first.playerId  === newId ? { ...s.first,  playerId: '' } : { ...s.first },
       second: s.second.playerId === newId ? { ...s.second, playerId: '' } : { ...s.second },
     }))
+    setBench(prev => prev.filter(id => id !== newId))
     setFpSlots(next); setSlots(nextSlots)
   }
   function updateFpPos(idx: number, pos: string) {
-    setFpSlots(prev => prev.map((f, i) => i === idx ? { ...f, position: pos } : f))
+    const oldPos = fpSlots[idx]?.position ?? ''
+    if (oldPos === pos) return
+    const ns = slots.map(s => ({ first: { ...s.first }, second: { ...s.second } }))
+    const nf = fpSlots.map(f => ({ ...f }))
+    if (pos) {
+      for (let i = 0; i < ns.length; i++) {
+        if (ns[i].first.position === pos) ns[i].first.position = oldPos
+      }
+      for (let i = 0; i < ns.length; i++) {
+        if (ns[i].second.playerId && ns[i].second.position === pos) ns[i].second.position = oldPos
+      }
+      for (let i = 0; i < nf.length; i++) {
+        if (i !== idx && nf[i].position === pos) nf[i].position = oldPos
+      }
+    }
+    nf[idx].position = pos
+    setSlots(ns); setFpSlots(nf)
   }
   function addFp()              { setFpSlots(prev => [...prev, { playerId: '', position: '' }]) }
   function removeFp(idx: number){ setFpSlots(prev => prev.filter((_, i) => i !== idx)) }
@@ -140,9 +195,23 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
   function updateUmpirePlayer(idx: number, v: string) { setUmpires(prev => prev.map((u, i) => i === idx ? { ...u, playerId: v } : u)) }
   function updateUmpireHalf(idx: number, v: string)   { setUmpires(prev => prev.map((u, i) => i === idx ? { ...u, half: v } : u)) }
 
+  // ─── ベンチ ──────────────────────────────────────────────────
+  // スタメン（打順・FP）に入っていない選手一覧
+  const assignedIds = new Set<string>([
+    ...slots.flatMap(s => [s.first.playerId, s.second.playerId]),
+    ...fpSlots.map(f => f.playerId),
+  ].filter(Boolean))
+
+  function toggleBench(id: string) {
+    setBench(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
+  }
+
   // ─── 保存 ───────────────────────────────────────────────────
   function save() {
-    const data: LineupData = { slots, fpSlots, umpires, note }
+    setSaveState('saving')
+    const data: LineupData = { slots, fpSlots, umpires, bench, note }
     const fd = new FormData()
     fd.append('scheduleId', scheduleId)
     fd.append('lineupJson', JSON.stringify(data))
@@ -154,8 +223,12 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
   const sFpCls = 'w-full bg-[#0d1b2a] border border-[#f59e0b]/30 rounded-lg px-1.5 py-1.5 text-sm text-[#e2e8f0] focus:border-[#f59e0b] focus:outline-none'
 
   // グリッド列定義: [番] [前半選手] [前半POS] [後半選手] [後半POS] [削除]
-  const ROW = '1.75rem 1fr 3.2rem 1fr 3.2rem 1.5rem'
-  const HDR = '1.75rem 1fr 3.2rem 1fr 3.2rem 1.5rem'
+  // 固定幅でスマホ横スクロール対応
+  const ROW = '1.75rem 1fr 2.8rem 1fr 2.8rem 1.5rem'
+  const HDR = '1.75rem 1fr 2.8rem 1fr 2.8rem 1.5rem'
+
+  // 全選手（レギュラー＋助っ人）
+  const allPlayers = [...players, ...GUEST_PLAYERS]
 
   const playerOpts = (
     <>
@@ -165,6 +238,27 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
           {p.number != null ? `#${p.number} ` : ''}{p.name}
         </option>
       ))}
+      <optgroup label="─ 助っ人 ─">
+        {GUEST_PLAYERS.map(p => (
+          <option key={p.id} value={p.id}>{p.name}</option>
+        ))}
+      </optgroup>
+    </>
+  )
+
+  const secondPlayerOpts = (
+    <>
+      <option value="">─ 同じ ─</option>
+      {players.map(p => (
+        <option key={p.id} value={p.id}>
+          {p.number != null ? `#${p.number} ` : ''}{p.name}
+        </option>
+      ))}
+      <optgroup label="─ 助っ人 ─">
+        {GUEST_PLAYERS.map(p => (
+          <option key={p.id} value={p.id}>{p.name}</option>
+        ))}
+      </optgroup>
     </>
   )
 
@@ -177,88 +271,134 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
         <p className="text-[11px] text-[#475569]">DP：打つだけ　FP：守るだけ</p>
       </div>
 
-      {/* 列ヘッダー */}
-      <div style={{ display: 'grid', gridTemplateColumns: HDR, gap: '0.5rem', alignItems: 'center' }} className="px-0.5">
-        <div />
-        <div className="text-[10px] text-[#3b82f6] font-bold text-center tracking-wider">前半</div>
-        <div />
-        <div className="text-[10px] text-[#f59e0b] font-bold text-center tracking-wider">後半</div>
-        <div />
-        <div />
-      </div>
+      {/* ── 打順・FP（横スクロール対応） ── */}
+      <div className="overflow-x-auto">
+        <div className="min-w-[500px] space-y-1.5">
 
-      {/* ── 打順リスト ── */}
-      <div className="space-y-1.5">
-        {slots.map((slot, idx) => (
-          <div key={idx} style={{ display: 'grid', gridTemplateColumns: ROW, gap: '0.4rem', alignItems: 'center' }}>
-
-            {/* 番号 */}
-            <span className="text-[#3b82f6] font-black text-sm text-right">{idx + 1}</span>
-
-            {/* 前半選手 */}
-            <select value={slot.first.playerId} onChange={e => changeFirst(idx, e.target.value)} className={sCls}>
-              {playerOpts}
-            </select>
-
-            {/* 前半POS */}
-            <select value={slot.first.position} onChange={e => updateFirstPos(idx, e.target.value)} className={sCls}>
-              <option value=""> </option>
-              {availableFirstPos(idx).map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-
-            {/* 後半選手 */}
-            <select value={slot.second.playerId} onChange={e => changeSecond(idx, e.target.value)}
-              className={sCls} style={{ borderColor: slot.second.playerId ? '#f59e0b40' : undefined }}>
-              <option value="">（前半と同じ）</option>
-              {players.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.number != null ? `#${p.number} ` : ''}{p.name}
-                </option>
-              ))}
-            </select>
-
-            {/* 後半POS */}
-            <select value={slot.second.position} onChange={e => updateSecondPos(idx, e.target.value)}
-              className={sCls} style={{ borderColor: slot.second.playerId ? '#f59e0b40' : undefined }}>
-              <option value=""> </option>
-              {availableSecondPos(idx).map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-
-            {/* 削除 */}
-            {idx >= 9
-              ? <button type="button" onClick={() => removeSlot(idx)} className="text-[#64748b] hover:text-red-400 text-base leading-none text-center">×</button>
-              : <div />}
-          </div>
-        ))}
-      </div>
-
-      <button type="button" onClick={addSlot} className="text-xs text-[#3b82f6] hover:text-[#60a5fa] transition-colors">
-        ＋ {slots.length + 1}番を追加
-      </button>
-
-      {/* ── FP（守備専任）── */}
-      <div className="pt-3 border-t border-[#1e3a5f] space-y-1.5">
-        <p className="text-xs font-bold text-[#f59e0b] tracking-widest uppercase flex items-baseline gap-2">
-          FP <span className="text-[#475569] normal-case font-normal text-[11px]">守るだけ（打順なし）</span>
-        </p>
-        {fpSlots.map((fp, idx) => (
-          <div key={idx} style={{ display: 'grid', gridTemplateColumns: ROW, gap: '0.4rem', alignItems: 'center' }}>
+          {/* 列ヘッダー */}
+          <div style={{ display: 'grid', gridTemplateColumns: HDR, gap: '0.5rem', alignItems: 'center' }} className="px-0.5 mb-1">
             <div />
-            <select value={fp.playerId} onChange={e => changeFpPlayer(idx, e.target.value)}
-              className={`col-span-1 w-full bg-[#0d1b2a] border border-[#f59e0b]/30 rounded-lg px-1.5 py-1.5 text-sm text-[#e2e8f0] focus:border-[#f59e0b] outline-none`}>
-              {playerOpts}
-            </select>
-            <select value={fp.position} onChange={e => updateFpPos(idx, e.target.value)} className={sFpCls}>
-              <option value=""> </option>
-              {availableFpPos(idx).map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-            <div /><div />
-            <button type="button" onClick={() => removeFp(idx)} className="text-[#64748b] hover:text-red-400 text-base leading-none text-center">×</button>
+            <div className="text-[10px] text-[#3b82f6] font-bold text-center tracking-wider">前半</div>
+            <div />
+            <div className="text-[10px] text-[#f59e0b] font-bold text-center tracking-wider">後半</div>
+            <div />
+            <div />
           </div>
-        ))}
-        <button type="button" onClick={addFp} className="text-xs text-[#f59e0b] hover:text-[#fbbf24] transition-colors">
-          ＋ FP を追加
-        </button>
+
+          {/* 打順リスト */}
+          {slots.map((slot, idx) => (
+            <div key={idx} style={{ display: 'grid', gridTemplateColumns: ROW, gap: '0.4rem', alignItems: 'center' }}>
+
+              {/* 番号 */}
+              <span className="text-[#3b82f6] font-black text-sm text-right">{idx + 1}</span>
+
+              {/* 前半選手 */}
+              <select value={slot.first.playerId} onChange={e => changeFirst(idx, e.target.value)} className={sCls}>
+                {playerOpts}
+              </select>
+
+              {/* 前半POS */}
+              <select value={slot.first.position} onChange={e => updateFirstPos(idx, e.target.value)} className={sCls}>
+                <option value=""> </option>
+                {availableFirstPos(idx).map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+
+              {/* 後半選手 */}
+              <select value={slot.second.playerId} onChange={e => changeSecond(idx, e.target.value)}
+                className={sCls} style={{ borderColor: slot.second.playerId ? '#f59e0b40' : undefined }}>
+                {secondPlayerOpts}
+              </select>
+
+              {/* 後半POS */}
+              <select value={slot.second.position} onChange={e => updateSecondPos(idx, e.target.value)}
+                className={sCls} style={{ borderColor: slot.second.playerId ? '#f59e0b40' : undefined }}>
+                <option value=""> </option>
+                {availableSecondPos(idx).map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+
+              {/* 削除 */}
+              {idx >= 9
+                ? <button type="button" onClick={() => removeSlot(idx)} className="text-[#64748b] hover:text-red-400 text-base leading-none text-center">×</button>
+                : <div />}
+            </div>
+          ))}
+
+          {/* ＋打順追加 */}
+          <button type="button" onClick={addSlot} className="text-xs text-[#3b82f6] hover:text-[#60a5fa] transition-colors pt-1">
+            ＋ {slots.length + 1}番を追加
+          </button>
+
+          {/* FP（守備専任）*/}
+          {(fpSlots.length > 0) && (
+            <div className="pt-2 space-y-1.5">
+              {fpSlots.map((fp, idx) => (
+                <div key={idx} style={{ display: 'grid', gridTemplateColumns: ROW, gap: '0.4rem', alignItems: 'center' }}>
+                  <div />
+                  <select value={fp.playerId} onChange={e => changeFpPlayer(idx, e.target.value)}
+                    className={`col-span-1 w-full bg-[#0d1b2a] border border-[#f59e0b]/30 rounded-lg px-1.5 py-1.5 text-sm text-[#e2e8f0] focus:border-[#f59e0b] outline-none`}>
+                    {playerOpts}
+                  </select>
+                  <select value={fp.position} onChange={e => updateFpPos(idx, e.target.value)} className={sFpCls}>
+                    <option value=""> </option>
+                    {availableFpPos(idx).map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                  <div /><div />
+                  <button type="button" onClick={() => removeFp(idx)} className="text-[#64748b] hover:text-red-400 text-base leading-none text-center">×</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── FP セクションヘッダー＋追加ボタン（スクロール外） ── */}
+      <div className="pt-1 border-t border-[#1e3a5f]">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-bold text-[#f59e0b] tracking-widest uppercase flex items-baseline gap-2">
+            FP <span className="text-[#475569] normal-case font-normal text-[11px]">守るだけ（打順なし）</span>
+          </p>
+          <button type="button" onClick={addFp} className="text-xs text-[#f59e0b] hover:text-[#fbbf24] transition-colors">
+            ＋ FP を追加
+          </button>
+        </div>
+      </div>
+
+      {/* ── ベンチ入り選手 ── */}
+      <div className="pt-3 border-t border-[#1e3a5f]">
+        <p className="text-xs font-bold text-[#22d3ee] tracking-widest uppercase mb-2">
+          ベンチ入り <span className="text-[#475569] normal-case font-normal text-[11px] ml-1">スタメン外で参加する選手</span>
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {players.map(p => {
+            const inLineup = assignedIds.has(p.id)
+            const inBench  = bench.includes(p.id)
+            if (inLineup) return null  // スタメンはここに出さない
+            if (p.id.startsWith('__guest_')) return null  // 助っ人はベンチ欄不要
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => toggleBench(p.id)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                  inBench
+                    ? 'bg-[#22d3ee]/15 border-[#22d3ee]/60 text-[#22d3ee]'
+                    : 'border-[#1e3a5f] text-[#475569] hover:border-[#22d3ee]/40 hover:text-[#94a3b8]'
+                }`}
+              >
+                {p.number != null ? `#${p.number} ` : ''}{p.name}
+              </button>
+            )
+          })}
+        </div>
+        {bench.length > 0 && (
+          <p className="text-[11px] text-[#22d3ee]/60 mt-2">
+            ベンチ: {bench
+              .map(id => players.find(p => p.id === id))
+              .filter(Boolean)
+              .map(p => (p!.number != null ? `#${p!.number} ` : '') + p!.name)
+              .join('、')}
+          </p>
+        )}
       </div>
 
       {/* ── 審判 ── */}
@@ -281,17 +421,17 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
 
         <div className="space-y-2">
           {umpires.map((u, idx) => (
-            <div key={idx} className="flex items-center gap-2">
+            <div key={idx} style={{ display: 'grid', gridTemplateColumns: '5rem 1fr 1.5rem', gap: '0.4rem', alignItems: 'center' }}>
               {/* 前半/後半/全試合 */}
               <select value={u.half} onChange={e => updateUmpireHalf(idx, e.target.value)}
-                className="w-20 bg-[#0d1b2a] border border-[#7c3aed]/30 rounded-lg px-2 py-1.5 text-xs text-[#a78bfa] focus:border-[#a78bfa] outline-none shrink-0">
+                className="w-full bg-[#0d1b2a] border border-[#7c3aed]/30 rounded-lg px-2 py-1.5 text-xs text-[#a78bfa] focus:border-[#a78bfa] outline-none">
                 <option value="前半">前半</option>
                 <option value="後半">後半</option>
                 <option value="全試合">全試合</option>
               </select>
               {/* 選手 */}
               <select value={u.playerId} onChange={e => updateUmpirePlayer(idx, e.target.value)}
-                className="flex-1 bg-[#0d1b2a] border border-[#7c3aed]/30 rounded-lg px-2 py-1.5 text-sm text-[#e2e8f0] focus:border-[#a78bfa] outline-none">
+                className="w-full bg-[#0d1b2a] border border-[#7c3aed]/30 rounded-lg px-2 py-1.5 text-sm text-[#e2e8f0] focus:border-[#a78bfa] outline-none min-w-0">
                 <option value="">── 選手を選択 ──</option>
                 {players.map(p => (
                   <option key={p.id} value={p.id}>
@@ -300,7 +440,7 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
                 ))}
               </select>
               <button type="button" onClick={() => removeUmpire(idx)}
-                className="text-[#64748b] hover:text-red-400 text-base leading-none shrink-0">×</button>
+                className="text-[#64748b] hover:text-red-400 text-base leading-none text-center">×</button>
             </div>
           ))}
         </div>
@@ -317,11 +457,23 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
         />
       </div>
 
-      {/* 保存ボタン */}
-      <button type="button" onClick={save} disabled={isPending}
-        className="btn-primary w-full py-2.5 mt-1 disabled:opacity-40 disabled:cursor-not-allowed">
-        {isPending ? '保存中...' : 'スタメンを保存'}
-      </button>
+      {/* 保存ボタン + フィードバック */}
+      <div className="flex items-center gap-3 mt-1">
+        <button
+          type="button"
+          onClick={save}
+          disabled={isPending}
+          className={`btn-primary flex-1 py-2.5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors ${
+            saveState === 'saved' ? 'bg-[#16a34a] border-[#16a34a]' : ''
+          }`}
+        >
+          {saveState === 'saving'
+            ? '保存中...'
+            : saveState === 'saved'
+              ? '✓ 保存しました'
+              : 'スタメンを保存'}
+        </button>
+      </div>
     </div>
   )
 }

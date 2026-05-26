@@ -154,6 +154,7 @@ export default async function AdminLineupPage({
     })),
     fpSlots:  [],
     umpires:  [],
+    bench:    [],
     note:     '',
   }
 
@@ -180,6 +181,7 @@ export default async function AdminLineupPage({
         ),
         fpSlots: parsed.fpSlots ?? [],
         umpires,
+        bench:   parsed.bench ?? [],
         note:    parsed.note ?? '',
       }
     } else {
@@ -211,6 +213,7 @@ export default async function AdminLineupPage({
           position: POS_TO_JA[e.position ?? ''] ?? e.position ?? '',
         })),
         umpires: [],
+        bench:   [],
         note: oldNote?.value ?? '',
       }
     }
@@ -268,7 +271,7 @@ export default async function AdminLineupPage({
               </div>
 
               {/* エディタ */}
-              <div className="glass-card rounded-2xl p-5 mb-4 overflow-x-auto">
+              <div className="glass-card rounded-2xl p-5 mb-4">
                 <LineupEditor
                   players={players}
                   scheduleId={selectedSchedule.id}
