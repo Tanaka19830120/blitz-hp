@@ -3,14 +3,10 @@ import { NextResponse } from 'next/server'
 
 export default auth((req) => {
   const { pathname } = req.nextUrl
-  const isLoggedIn = !!req.auth
   const isAdmin = req.auth?.user?.role === 'ADMIN'
 
+  // 管理画面だけ ADMIN ロール必須。それ以外は全員アクセス可
   if (pathname.startsWith('/admin') && !isAdmin) {
-    return NextResponse.redirect(new URL('/login', req.url))
-  }
-
-  if ((pathname.startsWith('/schedule') || pathname.startsWith('/stats')) && !isLoggedIn) {
     return NextResponse.redirect(new URL('/login', req.url))
   }
 
@@ -18,5 +14,5 @@ export default auth((req) => {
 })
 
 export const config = {
-  matcher: ['/admin/:path*', '/schedule/:path*', '/stats/:path*'],
+  matcher: ['/admin/:path*'],
 }
