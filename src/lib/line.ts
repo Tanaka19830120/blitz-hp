@@ -149,9 +149,8 @@ export function buildLineupFromJson(
   data: {
     slots:        Array<{ first: { playerId: string; position: string }; second: { playerId: string; position: string } }>
     fpSlots:      Array<{ playerId: string; position: string }>
-    umpireFirst:  string
-    umpireSecond: string
-    note:         string
+    umpires:  Array<{ playerId: string; half: string }>
+    note:     string
   },
   players: Array<{ id: string; name: string; number: number | null }>
 ): string {
@@ -197,11 +196,13 @@ export function buildLineupFromJson(
   }
 
   // 審判
-  const uf = data.umpireFirst  ? pm.get(data.umpireFirst)?.name  : ''
-  const us = data.umpireSecond ? pm.get(data.umpireSecond)?.name : ''
-  if (uf || us) {
-    const parts = [...(uf ? [`前半: ${uf}`] : []), ...(us ? [`後半: ${us}`] : [])]
-    lines.push(`━━━━━━━━━━━━\n⚖️ 審判 ${parts.join(' / ')}`)
+  const validUmpires = (data.umpires ?? []).filter(u => u.playerId)
+  if (validUmpires.length > 0) {
+    const parts = validUmpires.map(u => {
+      const name = pm.get(u.playerId)?.name ?? ''
+      return name ? `${u.half}: ${name}` : ''
+    }).filter(Boolean)
+    if (parts.length > 0) lines.push(`━━━━━━━━━━━━\n⚖️ 審判 ${parts.join(' / ')}`)
   }
 
   if (data.note?.trim()) lines.push(`━━━━━━━━━━━━\n📝 ${data.note}`)

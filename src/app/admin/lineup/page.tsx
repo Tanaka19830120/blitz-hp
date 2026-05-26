@@ -152,10 +152,9 @@ export default async function AdminLineupPage({
       first:  { playerId: '', position: '' },
       second: { playerId: '', position: '' },
     })),
-    fpSlots:      [],
-    umpireFirst:  '',
-    umpireSecond: '',
-    note:         '',
+    fpSlots:  [],
+    umpires:  [],
+    note:     '',
   }
 
   if (selectedId) {
@@ -163,16 +162,25 @@ export default async function AdminLineupPage({
 
     if (dataSetting?.value) {
       // 新JSON形式
-      const parsed: LineupData = JSON.parse(dataSetting.value)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const parsed: any = JSON.parse(dataSetting.value)
       const len = Math.max(9, parsed.slots?.length ?? 0)
+      // 旧形式（umpireFirst/umpireSecond）→ 新形式（umpires配列）に変換
+      let umpires = parsed.umpires ?? []
+      if (umpires.length === 0 && (parsed.umpireFirst || parsed.umpireSecond)) {
+        umpires = [
+          ...(parsed.umpireFirst  ? [{ playerId: parsed.umpireFirst,  half: '前半' }] : []),
+          ...(parsed.umpireSecond ? [{ playerId: parsed.umpireSecond, half: '後半' }] : []),
+        ]
+      }
+
       initialData = {
         slots: Array.from({ length: len }, (_, i) =>
           parsed.slots?.[i] ?? { first: { playerId: '', position: '' }, second: { playerId: '', position: '' } }
         ),
-        fpSlots:      parsed.fpSlots      ?? [],
-        umpireFirst:  parsed.umpireFirst   ?? '',
-        umpireSecond: parsed.umpireSecond  ?? '',
-        note:         parsed.note          ?? '',
+        fpSlots: parsed.fpSlots ?? [],
+        umpires,
+        note:    parsed.note ?? '',
       }
     } else {
       // 旧Lineupテーブルから変換
@@ -202,8 +210,7 @@ export default async function AdminLineupPage({
           playerId: e.userId,
           position: POS_TO_JA[e.position ?? ''] ?? e.position ?? '',
         })),
-        umpireFirst:  '',
-        umpireSecond: '',
+        umpires: [],
         note: oldNote?.value ?? '',
       }
     }

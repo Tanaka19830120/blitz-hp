@@ -12,12 +12,13 @@ interface HalfEntry { playerId: string; position: string }
 interface OrderSlot { first: HalfEntry; second: HalfEntry }
 interface FpSlot    { playerId: string; position: string }
 
+export interface UmpireSlot { playerId: string; half: string }
+
 export interface LineupData {
-  slots:         OrderSlot[]
-  fpSlots:       FpSlot[]
-  umpireFirst:   string   // playerId
-  umpireSecond:  string   // playerId
-  note:          string
+  slots:    OrderSlot[]
+  fpSlots:  FpSlot[]
+  umpires:  UmpireSlot[]   // 最大4人
+  note:     string
 }
 
 interface Props {
@@ -45,10 +46,9 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
       initialData.slots[i] ?? { first: empty(), second: empty() }
     )
   })
-  const [fpSlots,      setFpSlots]      = useState<FpSlot[]>(initialData.fpSlots)
-  const [umpireFirst,  setUmpireFirst]  = useState(initialData.umpireFirst)
-  const [umpireSecond, setUmpireSecond] = useState(initialData.umpireSecond)
-  const [note,         setNote]         = useState(initialData.note)
+  const [fpSlots,  setFpSlots]  = useState<FpSlot[]>(initialData.fpSlots)
+  const [umpires,  setUmpires]  = useState<UmpireSlot[]>(initialData.umpires ?? [])
+  const [note,     setNote]     = useState(initialData.note)
 
   // ─── ポジション重複検出 ──────────────────────────────────────
   const { firstConflicts, secondConflicts } = useMemo(() => {
@@ -117,9 +117,15 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
   function addFp()              { setFpSlots(prev => [...prev, { playerId: '', position: '' }]) }
   function removeFp(idx: number){ setFpSlots(prev => prev.filter((_, i) => i !== idx)) }
 
+  // ─── 審判 ────────────────────────────────────────────────────
+  function addUmpire()               { if (umpires.length < 4) setUmpires(prev => [...prev, { playerId: '', half: '前半' }]) }
+  function removeUmpire(idx: number) { setUmpires(prev => prev.filter((_, i) => i !== idx)) }
+  function updateUmpirePlayer(idx: number, v: string) { setUmpires(prev => prev.map((u, i) => i === idx ? { ...u, playerId: v } : u)) }
+  function updateUmpireHalf(idx: number, v: string)   { setUmpires(prev => prev.map((u, i) => i === idx ? { ...u, half: v } : u)) }
+
   // ─── 保存 ───────────────────────────────────────────────────
   function save() {
-    const data: LineupData = { slots, fpSlots, umpireFirst, umpireSecond, note }
+    const data: LineupData = { slots, fpSlots, umpires, note }
     const fd = new FormData()
     fd.append('scheduleId', scheduleId)
     fd.append('lineupJson', JSON.stringify(data))
@@ -249,26 +255,46 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
 
       {/* ── 審判 ── */}
       <div className="pt-3 border-t border-[#1e3a5f]">
-        <p className="text-xs font-bold text-[#a78bfa] tracking-widest uppercase mb-2">
-          審判 <span className="text-[#475569] normal-case font-normal text-[11px] ml-1">担当者を選択</span>
-        </p>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-[10px] text-[#3b82f6] font-bold mb-1">前半</label>
-            <select value={umpireFirst} onChange={e => setUmpireFirst(e.target.value)}
-              className="w-full bg-[#0d1b2a] border border-[#7c3aed]/30 rounded-lg px-2 py-1.5 text-sm text-[#e2e8f0] focus:border-[#a78bfa] outline-none">
-              <option value="">──</option>
-              {players.map(p => <option key={p.id} value={p.id}>{p.number != null ? `#${p.number} ` : ''}{p.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-[10px] text-[#f59e0b] font-bold mb-1">後半</label>
-            <select value={umpireSecond} onChange={e => setUmpireSecond(e.target.value)}
-              className="w-full bg-[#0d1b2a] border border-[#7c3aed]/30 rounded-lg px-2 py-1.5 text-sm text-[#e2e8f0] focus:border-[#a78bfa] outline-none">
-              <option value="">──</option>
-              {players.map(p => <option key={p.id} value={p.id}>{p.number != null ? `#${p.number} ` : ''}{p.name}</option>)}
-            </select>
-          </div>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-bold text-[#a78bfa] tracking-widest uppercase">
+            審判 <span className="text-[#475569] normal-case font-normal text-[11px] ml-1">最大4名</span>
+          </p>
+          {umpires.length < 4 && (
+            <button type="button" onClick={addUmpire}
+              className="text-xs text-[#a78bfa] hover:text-[#c4b5fd] transition-colors">
+              ＋ 追加
+            </button>
+          )}
+        </div>
+
+        {umpires.length === 0 && (
+          <p className="text-xs text-[#3b4f6a]">「＋ 追加」で審判担当を登録できます。</p>
+        )}
+
+        <div className="space-y-2">
+          {umpires.map((u, idx) => (
+            <div key={idx} className="flex items-center gap-2">
+              {/* 前半/後半/全試合 */}
+              <select value={u.half} onChange={e => updateUmpireHalf(idx, e.target.value)}
+                className="w-20 bg-[#0d1b2a] border border-[#7c3aed]/30 rounded-lg px-2 py-1.5 text-xs text-[#a78bfa] focus:border-[#a78bfa] outline-none shrink-0">
+                <option value="前半">前半</option>
+                <option value="後半">後半</option>
+                <option value="全試合">全試合</option>
+              </select>
+              {/* 選手 */}
+              <select value={u.playerId} onChange={e => updateUmpirePlayer(idx, e.target.value)}
+                className="flex-1 bg-[#0d1b2a] border border-[#7c3aed]/30 rounded-lg px-2 py-1.5 text-sm text-[#e2e8f0] focus:border-[#a78bfa] outline-none">
+                <option value="">── 選手を選択 ──</option>
+                {players.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.number != null ? `#${p.number} ` : ''}{p.name}
+                  </option>
+                ))}
+              </select>
+              <button type="button" onClick={() => removeUmpire(idx)}
+                className="text-[#64748b] hover:text-red-400 text-base leading-none shrink-0">×</button>
+            </div>
+          ))}
         </div>
       </div>
 
