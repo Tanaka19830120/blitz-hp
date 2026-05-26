@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useMemo } from 'react'
+import { useState, useTransition } from 'react'
 
 type Player = { id: string; name: string; number: number | null }
 
@@ -30,12 +30,6 @@ interface Props {
 
 const empty = (): HalfEntry => ({ playerId: '', position: '' })
 
-// ─── ポジション重複チェック ────────────────────────────────────
-function findDups(positions: string[]): Set<string> {
-  const cnt = new Map<string, number>()
-  for (const p of positions) if (p && p !== 'DP') cnt.set(p, (cnt.get(p) ?? 0) + 1)
-  return new Set([...cnt.entries()].filter(([, c]) => c > 1).map(([p]) => p))
-}
 
 export function LineupEditor({ players, scheduleId, initialData, saveAction }: Props) {
   const [isPending, startTransition] = useTransition()
@@ -50,15 +44,38 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
   const [umpires,  setUmpires]  = useState<UmpireSlot[]>(initialData.umpires ?? [])
   const [note,     setNote]     = useState(initialData.note)
 
-  // ─── ポジション重複検出 ──────────────────────────────────────
-  const { firstConflicts, secondConflicts } = useMemo(() => {
-    const firstPos  = [...slots.map(s => s.first.position),  ...fpSlots.map(f => f.position)]
-    const secondPos = [...slots.map(s => s.second.playerId ? s.second.position : s.first.position),
-                       ...fpSlots.map(f => f.position)]
-    return { firstConflicts: findDups(firstPos), secondConflicts: findDups(secondPos) }
-  }, [slots, fpSlots])
+  // ─── 使用可能ポジション計算（他のスロットで使用済みを除外） ──────
+  function availableFirstPos(slotIdx: number): string[] {
+    const taken = new Set<string>()
+    slots.forEach((s, i) => { if (i !== slotIdx && s.first.position && s.first.position !== 'DP') taken.add(s.first.position) })
+    fpSlots.forEach(f => { if (f.position) taken.add(f.position) })
+    const cur = slots[slotIdx].first.position
+    return POSITIONS.filter(p => p === 'DP' || p === cur || !taken.has(p))
+  }
 
-  const hasConflict = firstConflicts.size > 0 || secondConflicts.size > 0
+  function availableSecondPos(slotIdx: number): string[] {
+    const taken = new Set<string>()
+    slots.forEach((s, i) => {
+      if (i !== slotIdx) {
+        const p = s.second.playerId ? s.second.position : s.first.position
+        if (p && p !== 'DP') taken.add(p)
+      }
+    })
+    fpSlots.forEach(f => { if (f.position) taken.add(f.position) })
+    const cur = slots[slotIdx].second.position
+    return POSITIONS.filter(p => p === 'DP' || p === cur || !taken.has(p))
+  }
+
+  function availableFpPos(fpIdx: number): string[] {
+    const taken = new Set<string>()
+    slots.forEach(s => {
+      if (s.first.position  && s.first.position  !== 'DP') taken.add(s.first.position)
+      if (s.second.playerId && s.second.position && s.second.position !== 'DP') taken.add(s.second.position)
+    })
+    fpSlots.forEach((f, i) => { if (i !== fpIdx && f.position) taken.add(f.position) })
+    const cur = fpSlots[fpIdx]?.position
+    return FIELD_POSITIONS.filter(p => p === cur || !taken.has(p))
+  }
 
   // ─── 前半選手変更（打順内でスワップ） ─────────────────────────
   function changeFirst(idx: number, newId: string) {
@@ -133,14 +150,8 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
   }
 
   // ─── スタイル ─────────────────────────────────────────────
-  const sCls  = (conflict: boolean) =>
-    `w-full bg-[#0d1b2a] border rounded-lg px-1.5 py-1.5 text-sm text-[#e2e8f0] focus:outline-none ${
-      conflict ? 'border-[#ef4444] focus:border-[#ef4444]' : 'border-[#1e3a5f] focus:border-[#2563eb]'
-    }`
-  const sFpCls = (conflict: boolean) =>
-    `w-full bg-[#0d1b2a] border rounded-lg px-1.5 py-1.5 text-sm text-[#e2e8f0] focus:outline-none ${
-      conflict ? 'border-[#ef4444]' : 'border-[#f59e0b]/30 focus:border-[#f59e0b]'
-    }`
+  const sCls   = 'w-full bg-[#0d1b2a] border border-[#1e3a5f] rounded-lg px-1.5 py-1.5 text-sm text-[#e2e8f0] focus:border-[#2563eb] focus:outline-none'
+  const sFpCls = 'w-full bg-[#0d1b2a] border border-[#f59e0b]/30 rounded-lg px-1.5 py-1.5 text-sm text-[#e2e8f0] focus:border-[#f59e0b] focus:outline-none'
 
   // グリッド列定義: [番] [前半選手] [前半POS] [後半選手] [後半POS] [削除]
   const ROW = '1.75rem 1fr 3.2rem 1fr 3.2rem 1.5rem'
@@ -185,20 +196,19 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
             <span className="text-[#3b82f6] font-black text-sm text-right">{idx + 1}</span>
 
             {/* 前半選手 */}
-            <select value={slot.first.playerId} onChange={e => changeFirst(idx, e.target.value)} className={sCls(false)}>
+            <select value={slot.first.playerId} onChange={e => changeFirst(idx, e.target.value)} className={sCls}>
               {playerOpts}
             </select>
 
             {/* 前半POS */}
-            <select value={slot.first.position} onChange={e => updateFirstPos(idx, e.target.value)}
-              className={sCls(!!slot.first.position && firstConflicts.has(slot.first.position))}>
+            <select value={slot.first.position} onChange={e => updateFirstPos(idx, e.target.value)} className={sCls}>
               <option value=""> </option>
-              {POSITIONS.map(p => <option key={p} value={p}>{p}</option>)}
+              {availableFirstPos(idx).map(p => <option key={p} value={p}>{p}</option>)}
             </select>
 
             {/* 後半選手 */}
-            <select value={slot.second.playerId} onChange={e => changeSecond(idx, e.target.value)} className={sCls(false)}
-              style={{ borderColor: slot.second.playerId ? '#f59e0b40' : undefined }}>
+            <select value={slot.second.playerId} onChange={e => changeSecond(idx, e.target.value)}
+              className={sCls} style={{ borderColor: slot.second.playerId ? '#f59e0b40' : undefined }}>
               <option value="">（前半と同じ）</option>
               {players.map(p => (
                 <option key={p.id} value={p.id}>
@@ -209,10 +219,9 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
 
             {/* 後半POS */}
             <select value={slot.second.position} onChange={e => updateSecondPos(idx, e.target.value)}
-              className={sCls(!!slot.second.playerId && !!slot.second.position && secondConflicts.has(slot.second.position))}
-              style={{ borderColor: slot.second.playerId ? '#f59e0b40' : undefined }}>
+              className={sCls} style={{ borderColor: slot.second.playerId ? '#f59e0b40' : undefined }}>
               <option value=""> </option>
-              {POSITIONS.map(p => <option key={p} value={p}>{p}</option>)}
+              {availableSecondPos(idx).map(p => <option key={p} value={p}>{p}</option>)}
             </select>
 
             {/* 削除 */}
@@ -239,10 +248,9 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
               className={`col-span-1 w-full bg-[#0d1b2a] border border-[#f59e0b]/30 rounded-lg px-1.5 py-1.5 text-sm text-[#e2e8f0] focus:border-[#f59e0b] outline-none`}>
               {playerOpts}
             </select>
-            <select value={fp.position} onChange={e => updateFpPos(idx, e.target.value)}
-              className={sFpCls(!!fp.position && firstConflicts.has(fp.position))}>
+            <select value={fp.position} onChange={e => updateFpPos(idx, e.target.value)} className={sFpCls}>
               <option value=""> </option>
-              {FIELD_POSITIONS.map(p => <option key={p} value={p}>{p}</option>)}
+              {availableFpPos(idx).map(p => <option key={p} value={p}>{p}</option>)}
             </select>
             <div /><div />
             <button type="button" onClick={() => removeFp(idx)} className="text-[#64748b] hover:text-red-400 text-base leading-none text-center">×</button>
@@ -309,17 +317,10 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
         />
       </div>
 
-      {/* ポジション重複エラー */}
-      {hasConflict && (
-        <div className="rounded-xl border border-[#ef4444]/50 bg-[#ef4444]/5 px-4 py-2.5 text-sm text-[#ef4444]">
-          ⚠ ポジションが重複しています。赤枠の箇所を確認してください。
-        </div>
-      )}
-
       {/* 保存ボタン */}
-      <button type="button" onClick={save} disabled={isPending || hasConflict}
+      <button type="button" onClick={save} disabled={isPending}
         className="btn-primary w-full py-2.5 mt-1 disabled:opacity-40 disabled:cursor-not-allowed">
-        {isPending ? '保存中...' : hasConflict ? '⚠ ポジション重複あり（保存不可）' : 'スタメンを保存'}
+        {isPending ? '保存中...' : 'スタメンを保存'}
       </button>
     </div>
   )
