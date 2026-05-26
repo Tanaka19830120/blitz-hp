@@ -65,7 +65,9 @@ async function saveLineup(formData: FormData) {
 
 async function sendLineLineup(formData: FormData) {
   'use server'
-  const scheduleId = String(formData.get('scheduleId'))
+  const scheduleId    = String(formData.get('scheduleId'))
+  const senderName    = String(formData.get('senderName')   || '').trim()
+  const senderNumber  = String(formData.get('senderNumber') || '').trim()
 
   const schedule = await prisma.schedule.findUnique({
     where:  { id: scheduleId },
@@ -77,11 +79,16 @@ async function sendLineLineup(formData: FormData) {
     select: { id: true, name: true, number: true },
   })
 
+  // 送信者フッター
+  const senderFooter = senderName
+    ? `\n━━━━━━━━━━━━\n📨 送信者: ${senderNumber ? `#${senderNumber} ` : ''}${senderName}`
+    : ''
+
   // JSON形式が存在すればそちらを使用
   const dataSetting = await prisma.setting.findUnique({ where: { key: `lineupData_${scheduleId}` } })
   if (dataSetting?.value) {
     const data: LineupData = JSON.parse(dataSetting.value)
-    const msg = buildLineupFromJson(schedule, data, players)
+    const msg = buildLineupFromJson(schedule, data, players) + senderFooter
     await sendToLineGroup(msg)
   } else {
     // 旧形式フォールバック
@@ -92,7 +99,7 @@ async function sendLineLineup(formData: FormData) {
       orderBy: { battingOrder: 'asc' },
     })
     const noteSetting = await prisma.setting.findUnique({ where: { key: `lineupNote_${scheduleId}` } })
-    const msg = buildLineup(schedule, lineups, noteSetting?.value || undefined)
+    const msg = buildLineup(schedule, lineups, noteSetting?.value || undefined) + senderFooter
     await sendToLineGroup(msg)
   }
 
