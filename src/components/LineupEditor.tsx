@@ -224,8 +224,8 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
 
   // グリッド列定義: [番] [前半選手] [前半POS] [後半選手] [後半POS] [削除]
   // 固定幅でスマホ横スクロール対応
-  const ROW = '1.75rem 1fr 2.8rem 1fr 2.8rem 1.5rem'
-  const HDR = '1.75rem 1fr 2.8rem 1fr 2.8rem 1.5rem'
+  const ROW = '1.75rem 1fr 4rem 1fr 4rem 1.5rem'
+  const HDR = '1.75rem 1fr 4rem 1fr 4rem 1.5rem'
 
   // 全選手（レギュラー＋助っ人）
   const allPlayers = [...players, ...GUEST_PLAYERS]
@@ -273,7 +273,7 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
 
       {/* ── 打順・FP（横スクロール対応） ── */}
       <div className="overflow-x-auto">
-        <div className="min-w-[500px] space-y-1.5">
+        <div className="min-w-[540px] space-y-1.5">
 
           {/* 列ヘッダー */}
           <div style={{ display: 'grid', gridTemplateColumns: HDR, gap: '0.5rem', alignItems: 'center' }} className="px-0.5 mb-1">
