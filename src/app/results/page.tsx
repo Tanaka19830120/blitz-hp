@@ -10,9 +10,33 @@ function formatDate(date: Date) {
   })
 }
 
-export default async function ResultsPage() {
+export default async function ResultsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ year?: string }>
+}) {
+  const sp = await searchParams
+  const currentYear = new Date().getFullYear()
+  const selectedYear = sp.year ? parseInt(sp.year) : undefined
+
+  // Get available years
+  const allSchedules = await prisma.schedule.findMany({
+    where: { game: { isNot: null } },
+    select: { date: true },
+  })
+  const years = [...new Set(allSchedules.map((s) => new Date(s.date).getFullYear()))].sort((a, b) => b - a)
+
+  let dateFilter: { gte?: Date; lte?: Date } | undefined
+  if (selectedYear) {
+    dateFilter = {
+      gte: new Date(`${selectedYear}-01-01`),
+      lte: new Date(`${selectedYear}-12-31T23:59:59`),
+    }
+  }
+
   const games = await prisma.game.findMany({
-    orderBy: { createdAt: 'desc' },
+    where: dateFilter ? { schedule: { date: dateFilter } } : undefined,
+    orderBy: { schedule: { date: 'desc' } },
     include: {
       schedule: true,
       stats: { include: { user: { select: { name: true, number: true } } } },
@@ -28,6 +52,34 @@ export default async function ResultsPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-black text-[#e2e8f0] mb-2">試合結果</h1>
         <p className="text-[#64748b]">全試合の結果一覧</p>
+      </div>
+
+      {/* Season tabs */}
+      <div className="flex flex-wrap gap-2 mb-6">
+        <Link
+          href="/results"
+          className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-all ${
+            !selectedYear
+              ? 'bg-[#2563eb] border-[#2563eb] text-white'
+              : 'border-[#1e3a5f] text-[#64748b] hover:border-[#2563eb]/50 hover:text-[#94a3b8]'
+          }`}
+        >
+          全期間
+        </Link>
+        {years.map((year) => (
+          <Link
+            key={year}
+            href={`/results?year=${year}`}
+            className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-all ${
+              selectedYear === year
+                ? 'bg-[#2563eb] border-[#2563eb] text-white'
+                : 'border-[#1e3a5f] text-[#64748b] hover:border-[#2563eb]/50 hover:text-[#94a3b8]'
+            }`}
+          >
+            {year}年
+            {year === currentYear && <span className="ml-1 text-[10px] text-[#60a5fa]">●</span>}
+          </Link>
+        ))}
       </div>
 
       {/* Season record */}
@@ -52,7 +104,7 @@ export default async function ResultsPage() {
             <div className="text-3xl font-black text-[#e2e8f0]">{games.length}</div>
             <div className="text-xs text-[#64748b] mt-1 tracking-wider">TOTAL</div>
           </div>
-          {games.length > 0 && (
+          {games.length > 0 && wins + losses + draws > 0 && (
             <>
               <div className="w-px bg-[#1e3a5f] hidden sm:block" />
               <div className="text-center">
@@ -68,7 +120,7 @@ export default async function ResultsPage() {
 
       {games.length === 0 ? (
         <div className="glass-card rounded-2xl p-12 text-center text-[#64748b]">
-          試合結果はまだ登録されていません
+          {selectedYear ? `${selectedYear}年の試合結果はありません` : '試合結果はまだ登録されていません'}
         </div>
       ) : (
         <div className="flex flex-col gap-4">
@@ -121,12 +173,20 @@ export default async function ResultsPage() {
                       <span className="text-[#64748b]">{game.opponentScore}</span>
                     </div>
 
-                    {topHitter && (
-                      <div className="hidden sm:block text-right text-xs text-[#64748b]">
-                        <div className="text-[#94a3b8] font-medium">{topHitter.user.name}</div>
-                        <div>{topHitter.hits}/{topHitter.atBats} {topHitter.rbi > 0 ? `${topHitter.rbi}打点` : ''}</div>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-3">
+                      {topHitter && (
+                        <div className="hidden sm:block text-right text-xs text-[#64748b]">
+                          <div className="text-[#94a3b8] font-medium">{topHitter.user.name}</div>
+                          <div>{topHitter.hits}/{topHitter.atBats} {topHitter.rbi > 0 ? `${topHitter.rbi}打点` : ''}</div>
+                        </div>
+                      )}
+                      <Link
+                        href={`/results/${game.schedule.id}`}
+                        className="text-xs px-3 py-1.5 rounded-lg border border-[#1e3a5f] text-[#60a5fa] hover:bg-[#1e3a5f]/30 transition-all whitespace-nowrap"
+                      >
+                        詳細 →
+                      </Link>
+                    </div>
                   </div>
                 </div>
 

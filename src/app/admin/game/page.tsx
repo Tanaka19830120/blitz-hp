@@ -345,7 +345,7 @@ export default async function AdminGamePage({
               <h3 className="text-sm font-bold text-[#a78bfa] mb-1">投手成績</h3>
               <p className="text-xs text-[#64748b] mb-4">
                 登板した選手のみ「投球回」を入力してください。投球回が空欄の場合は保存されません。<br />
-                投球回の形式：<span className="text-[#94a3b8]">5（5回）、5.1（5回1/3）、5.2（5回2/3）</span>
+                投球回の形式：<span className="text-[#94a3b8]">5（5回）、5.1（5回1/3）、5.2（5回2/3）または「5回0/3」「5回1/3」</span>
               </p>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[700px]">

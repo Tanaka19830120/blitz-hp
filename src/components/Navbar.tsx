@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
 import { useState } from 'react'
@@ -11,6 +12,8 @@ const navLinks = [
   { href: '/results', label: '試合結果' },
   { href: '/stats', label: '成績' },
   { href: '/members', label: 'メンバー' },
+  { href: '/profile', label: 'チーム紹介' },
+  { href: '/contact', label: 'お問い合わせ' },
 ]
 
 export function Navbar() {
@@ -22,6 +25,7 @@ export function Navbar() {
     <nav className="fixed top-0 left-0 right-0 z-50 glass-card border-b border-[#1e3a5f]">
       <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2">
+          <Image src="/blitz-logo.jpg" alt="BLITZ" width={36} height={36} className="rounded-full" />
           <span className="text-2xl font-black tracking-widest text-gradient">BLITZ</span>
           <span className="hidden sm:block text-xs text-[#64748b] font-medium">SOFTBALL</span>
         </Link>
@@ -32,7 +36,7 @@ export function Navbar() {
               key={link.href}
               href={link.href}
               className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                pathname === link.href
+                (link.href === '/' ? pathname === '/' : pathname.startsWith(link.href))
                   ? 'bg-[#1a2744] text-[#60a5fa]'
                   : 'text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-[#0d1b2a]'
               }`}
@@ -94,7 +98,7 @@ export function Navbar() {
               href={link.href}
               onClick={() => setMenuOpen(false)}
               className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                pathname === link.href
+                (link.href === '/' ? pathname === '/' : pathname.startsWith(link.href))
                   ? 'bg-[#1a2744] text-[#60a5fa]'
                   : 'text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-[#0d1b2a]'
               }`}

@@ -47,7 +47,10 @@ interface PitcherStats {
 }
 
 function parseInnings(s: string): number {
-  // Supports "5", "5.1", "5.2" (where .1 = 1/3, .2 = 2/3)
+  // "5回0/3" / "5回1/3" / "5回2/3" 形式（teams.one インポートデータ）
+  const kanji = s.match(/^(\d+)回(\d)\/3/)
+  if (kanji) return parseInt(kanji[1]) * 3 + parseInt(kanji[2])
+  // "5" / "5.1" / "5.2" 形式（.1 = 1/3, .2 = 2/3）
   const n = parseFloat(s)
   if (isNaN(n) || n < 0) return 0
   const full = Math.floor(n)

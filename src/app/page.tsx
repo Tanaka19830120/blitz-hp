@@ -1,12 +1,13 @@
 import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
+import Image from 'next/image'
 
 async function getHomeData() {
   const now = new Date()
   const [games, nextSchedule, totalGames] = await Promise.all([
     prisma.game.findMany({
       take: 6,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { schedule: { date: 'desc' } },
       include: { schedule: true },
     }),
     prisma.schedule.findFirst({
@@ -43,51 +44,152 @@ export default async function HomePage() {
   return (
     <div className="pt-16">
       {/* Hero */}
-      <section className="hero-bg relative overflow-hidden min-h-[90vh] flex items-center">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-20 left-10 w-96 h-96 bg-blue-600/5 rounded-full blur-3xl" />
-          <div className="absolute bottom-20 right-10 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-900/10 rounded-full blur-3xl" />
+      <section className="relative overflow-hidden min-h-[100svh] flex items-center">
+        {/* AI-generated softball action photo background */}
+        <div className="absolute inset-0">
+          <Image
+            src="/hero-softball.jpg"
+            alt="BLITZ softball action"
+            fill
+            priority
+            className="object-cover object-center"
+          />
+          {/* Dark overlay gradient — left side darker for text, right shows image */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background: 'linear-gradient(105deg, rgba(5,10,21,0.95) 0%, rgba(5,10,21,0.85) 40%, rgba(5,10,21,0.5) 65%, rgba(5,10,21,0.2) 100%)',
+            }}
+          />
+          {/* Bottom fade to page bg */}
+          <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#050a15] to-transparent" />
         </div>
-        <div className="relative z-10 max-w-7xl mx-auto px-4 py-20 w-full">
-          <div className="max-w-3xl">
-            <p className="text-[#60a5fa] text-sm font-semibold tracking-[0.3em] uppercase mb-4">
-              Softball Team
-            </p>
-            <h1 className="text-[clamp(4rem,15vw,10rem)] font-black tracking-tight leading-none mb-6">
-              <span className="text-gradient">BLITZ</span>
-            </h1>
-            <p className="text-[#94a3b8] text-lg md:text-xl mb-10 max-w-lg">
-              熱く、鋭く、打ち勝つ。<br />仲間と共に頂点を目指す。
-            </p>
-            <div className="flex flex-wrap gap-4 mb-12">
-              <Link href="/schedule" className="btn-primary text-base px-6 py-3">
-                日程・出欠を確認
-              </Link>
-              <Link href="/results" className="btn-gold text-base px-6 py-3">
-                試合結果
-              </Link>
+
+        {/* Background atmospheric layers */}
+        <div className="absolute inset-0 pointer-events-none">
+          {/* Glowing orbs on top of photo */}
+          <div className="absolute top-1/3 left-0 w-[300px] h-[300px] bg-blue-600/10 rounded-full blur-[80px]" />
+          {/* Grid overlay */}
+          <div
+            className="absolute inset-0 opacity-[0.015]"
+            style={{
+              backgroundImage: 'linear-gradient(rgba(96,165,250,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(96,165,250,0.5) 1px, transparent 1px)',
+              backgroundSize: '60px 60px',
+            }}
+          />
+        </div>
+
+        <div className="relative z-10 max-w-7xl mx-auto px-4 py-24 w-full">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            {/* Left: team identity */}
+            <div>
+              {/* Logo + badge */}
+              <div className="flex items-center gap-4 mb-8">
+                <div className="relative">
+                  <div className="absolute inset-0 rounded-full bg-blue-500/20 blur-xl scale-150" />
+                  <Image
+                    src="/blitz-logo.jpg"
+                    alt="BLITZ"
+                    width={72}
+                    height={72}
+                    className="relative rounded-full ring-2 ring-[#2563eb]/40"
+                  />
+                </div>
+                <div>
+                  <div className="text-[#60a5fa] text-xs font-bold tracking-[0.4em] uppercase">Softball Team</div>
+                  <div className="text-[#475569] text-xs tracking-widest mt-0.5">SDソフトボールリーグ</div>
+                </div>
+              </div>
+
+              {/* Main headline */}
+              <h1 className="font-black tracking-tight leading-none mb-3">
+                <span
+                  className="block text-[clamp(5rem,18vw,11rem)]"
+                  style={{
+                    background: 'linear-gradient(135deg, #ffffff 0%, #60a5fa 40%, #fbbf24 80%, #ffffff 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text',
+                    filter: 'drop-shadow(0 0 40px rgba(96,165,250,0.3))',
+                  }}
+                >
+                  BLITZ
+                </span>
+              </h1>
+
+              {/* Accent line */}
+              <div className="flex items-center gap-4 mb-6">
+                <div className="h-px flex-1 max-w-[80px]" style={{ background: 'linear-gradient(90deg, #2563eb, transparent)' }} />
+                <span className="text-[#64748b] text-xs tracking-[0.3em] uppercase font-semibold">Est. 2019</span>
+              </div>
+
+              <p className="text-[#94a3b8] text-lg md:text-xl mb-10 leading-relaxed">
+                熱く、鋭く、打ち勝つ。<br />
+                <span className="text-[#60a5fa]">仲間と共に頂点を目指す。</span>
+              </p>
+
+              <div className="flex flex-wrap gap-4">
+                <Link href="/schedule" className="btn-primary text-base px-6 py-3">
+                  📅 日程・出欠を確認
+                </Link>
+                <Link href="/results" className="btn-gold text-base px-6 py-3">
+                  ⚾ 試合結果
+                </Link>
+              </div>
             </div>
+
+            {/* Right: scoreboard stats */}
             {total > 0 && (
-              <div className="glass-card rounded-2xl p-6 inline-flex gap-8">
-                <div className="text-center">
-                  <div className="text-4xl font-black text-[#22c55e]">{wins}</div>
-                  <div className="text-xs text-[#64748b] mt-1 font-medium tracking-wider">WIN</div>
-                </div>
-                <div className="w-px bg-[#1e3a5f]" />
-                <div className="text-center">
-                  <div className="text-4xl font-black text-[#ef4444]">{losses}</div>
-                  <div className="text-xs text-[#64748b] mt-1 font-medium tracking-wider">LOSE</div>
-                </div>
-                <div className="w-px bg-[#1e3a5f]" />
-                <div className="text-center">
-                  <div className="text-4xl font-black text-[#f59e0b]">{draws}</div>
-                  <div className="text-xs text-[#64748b] mt-1 font-medium tracking-wider">DRAW</div>
-                </div>
-                <div className="w-px bg-[#1e3a5f]" />
-                <div className="text-center">
-                  <div className="text-4xl font-black text-[#e2e8f0]">{total}</div>
-                  <div className="text-xs text-[#64748b] mt-1 font-medium tracking-wider">TOTAL</div>
+              <div className="flex justify-center lg:justify-end">
+                <div className="w-full max-w-xs">
+                  {/* Scoreboard header */}
+                  <div
+                    className="rounded-t-2xl px-5 py-3 flex items-center justify-between"
+                    style={{ background: 'linear-gradient(135deg, #1d4ed8, #1e3a5f)' }}
+                  >
+                    <span className="text-xs font-bold tracking-[0.3em] text-white/80 uppercase">Season Record</span>
+                    <span className="text-xs text-[#60a5fa] font-mono">{total}G</span>
+                  </div>
+                  {/* Score rows */}
+                  <div className="rounded-b-2xl overflow-hidden border border-[#1e3a5f] border-t-0">
+                    {[
+                      { label: 'WIN', value: wins, color: '#22c55e', bg: 'rgba(34,197,94,0.08)', bar: wins / total },
+                      { label: 'LOSE', value: losses, color: '#ef4444', bg: 'rgba(239,68,68,0.08)', bar: losses / total },
+                      { label: 'DRAW', value: draws, color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', bar: draws / total },
+                    ].map(({ label, value, color, bg, bar }) => (
+                      <div key={label} className="relative px-5 py-4 border-b border-[#1e3a5f] last:border-0" style={{ background: bg }}>
+                        {/* Progress bar */}
+                        <div
+                          className="absolute left-0 top-0 bottom-0 opacity-20"
+                          style={{ width: `${bar * 100}%`, background: color }}
+                        />
+                        <div className="relative flex items-center justify-between">
+                          <span className="text-xs font-bold tracking-[0.3em]" style={{ color }}>{label}</span>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-4xl font-black" style={{ color }}>{value}</span>
+                            <span className="text-xs text-[#475569]">
+                              {total > 0 ? Math.round(value / total * 100) : 0}%
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {/* Win rate */}
+                    <div className="px-5 py-3 bg-[#0d1b2a]/80 flex items-center justify-between">
+                      <span className="text-xs text-[#64748b] tracking-widest">WIN RATE</span>
+                      <span
+                        className="text-xl font-black"
+                        style={{
+                          background: 'linear-gradient(135deg, #22c55e, #60a5fa)',
+                          WebkitBackgroundClip: 'text',
+                          WebkitTextFillColor: 'transparent',
+                          backgroundClip: 'text',
+                        }}
+                      >
+                        {total > 0 ? (wins / total * 100).toFixed(1) : '0.0'}%
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -103,7 +205,7 @@ export default async function HomePage() {
             <div>
               <div className="flex items-center gap-3 mb-2">
                 <span className="badge-pending">
-                  {nextSchedule.type === 'REGULAR' ? '公式戦' : nextSchedule.type === 'PRACTICE' ? '練習試合' : 'トーナメント'}
+                  {nextSchedule.type === 'REGULAR' ? '公式戦' : nextSchedule.type === 'TOURNAMENT' ? 'トーナメント' : nextSchedule.type === 'EVENT' ? 'イベント' : '練習試合'}
                 </span>
                 <span className="text-[#60a5fa] font-bold text-sm">
                   {daysUntil(nextSchedule.date) === 0 ? '本日' : `${daysUntil(nextSchedule.date)}日後`}

@@ -81,9 +81,11 @@ export default async function SchedulePage() {
                           ? 'text-[#60a5fa] border-[#1d4ed8]/40 bg-[#1d4ed8]/10'
                           : schedule.type === 'TOURNAMENT'
                             ? 'text-[#fbbf24] border-[#d97706]/40 bg-[#d97706]/10'
-                            : 'text-[#94a3b8] border-[#1e3a5f] bg-[#1e3a5f]/20'
+                            : schedule.type === 'EVENT'
+                              ? 'text-[#a78bfa] border-[#7c3aed]/40 bg-[#7c3aed]/10'
+                              : 'text-[#94a3b8] border-[#1e3a5f] bg-[#1e3a5f]/20'
                       }`}>
-                        {schedule.type === 'REGULAR' ? '公式戦' : schedule.type === 'PRACTICE' ? '練習試合' : 'トーナメント'}
+                        {schedule.type === 'REGULAR' ? '公式戦' : schedule.type === 'TOURNAMENT' ? 'トーナメント' : schedule.type === 'EVENT' ? 'イベント' : '練習試合'}
                       </span>
                       {isPast && <span className="text-xs text-[#64748b] border border-[#1e3a5f] px-2 py-0.5 rounded">終了</span>}
                     </div>
@@ -149,19 +151,38 @@ export default async function SchedulePage() {
                         </form>
                       </div>
                     )}
+                  </div>
+                </div>
 
-                    <div className="flex gap-3 text-sm">
-                      <span className="text-[#22c55e]">参加 {attending.length}名</span>
-                      <span className="text-[#ef4444]">欠席 {absent.length}名</span>
-                    </div>
-
+                {/* Attendance overview */}
+                <div className="mt-4 pt-4 border-t border-[#1e3a5f]/30 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <span className="text-[#22c55e] font-bold">✓ 参加 {attending.length}名</span>
                     {attending.length > 0 && (
-                      <div className="text-xs text-[#64748b]">
-                        {attending.slice(0, 8).map((a) => a.user.name).join('・')}
-                        {attending.length > 8 && ` 他${attending.length - 8}名`}
+                      <div className="mt-1 text-[#64748b] leading-relaxed">
+                        {attending.map((a) => a.user.name).join('・')}
                       </div>
                     )}
                   </div>
+                  <div>
+                    <span className="text-[#ef4444] font-bold">✗ 欠席 {absent.length}名</span>
+                    {absent.length > 0 && (
+                      <div className="mt-1 text-[#64748b] leading-relaxed">
+                        {absent.map((a) => a.user.name).join('・')}
+                      </div>
+                    )}
+                  </div>
+                  {(() => {
+                    const maybe = schedule.attendances.filter((a) => a.status === 'MAYBE')
+                    return maybe.length > 0 ? (
+                      <div>
+                        <span className="text-[#f59e0b] font-bold">? 未定 {maybe.length}名</span>
+                        <div className="mt-1 text-[#64748b] leading-relaxed">
+                          {maybe.map((a) => a.user.name).join('・')}
+                        </div>
+                      </div>
+                    ) : null
+                  })()}
                 </div>
               </div>
             )
@@ -171,3 +192,4 @@ export default async function SchedulePage() {
     </div>
   )
 }
+
