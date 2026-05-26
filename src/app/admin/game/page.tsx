@@ -152,7 +152,8 @@ async function saveGameResult(formData: FormData) {
   revalidatePath('/results')
   revalidatePath('/stats')
   revalidatePath('/')
-  redirect('/admin')
+  // 編集後は同じ試合ページに戻る
+  redirect(`/admin/game?scheduleId=${scheduleId}`)
 }
 
 export default async function AdminGamePage({
@@ -165,10 +166,11 @@ export default async function AdminGamePage({
   const lineConfigured = !!(process.env.LINE_CHANNEL_ACCESS_TOKEN && process.env.LINE_GROUP_ID)
 
   const [schedules, allPlayers] = await Promise.all([
+    // 結果入力済みも含めて全試合を表示
     prisma.schedule.findMany({
-      where: { game: null },
       orderBy: { date: 'desc' },
-      take: 20,
+      take: 30,
+      include: { game: { select: { id: true } } },
     }),
     prisma.user.findMany({
       orderBy: [{ number: 'asc' }, { name: 'asc' }],
@@ -180,6 +182,20 @@ export default async function AdminGamePage({
     ? schedules.find((s) => s.id === selectedId) ??
       (await prisma.schedule.findUnique({ where: { id: selectedId } }))
     : null
+
+  // 既存の試合結果・個人成績を取得（編集用の初期値）
+  const existingGame = selectedId
+    ? await prisma.game.findUnique({
+        where: { scheduleId: selectedId },
+        include: {
+          stats:         true,
+          pitchingStats: true,
+        },
+      })
+    : null
+
+  const existingStatMap  = new Map(existingGame?.stats.map(s => [s.userId, s])         ?? [])
+  const existingPitchMap = new Map(existingGame?.pitchingStats.map(s => [s.userId, s]) ?? [])
 
   // Fetch lineup for pre-filling batting order and position
   const lineup = selectedId
@@ -195,19 +211,19 @@ export default async function AdminGamePage({
 
   // Lineup players first (sorted by batting order), then the rest
   const lineupPlayers = lineup.map((l) => l.user)
-  const otherPlayers = allPlayers.filter((p) => !lineupPlayerIds.has(p.id))
+  const otherPlayers  = allPlayers.filter((p) => !lineupPlayerIds.has(p.id))
   const sortedPlayers = [...lineupPlayers, ...otherPlayers]
 
   return (
     <div className="pt-16 max-w-5xl mx-auto px-4 py-12">
       <div className="flex items-center gap-4 mb-8">
         <Link href="/admin" className="text-[#64748b] hover:text-[#94a3b8]">← 管理</Link>
-        <h1 className="text-2xl font-black text-[#e2e8f0]">試合結果を入力</h1>
+        <h1 className="text-2xl font-black text-[#e2e8f0]">試合結果を入力・編集</h1>
       </div>
 
       {schedules.length === 0 && !selected ? (
         <div className="glass-card rounded-2xl p-12 text-center text-[#64748b]">
-          結果未入力の試合がありません。
+          日程が登録されていません。
           <Link href="/admin/schedule" className="text-[#60a5fa] ml-2">日程を追加する</Link>
         </div>
       ) : (
@@ -228,6 +244,7 @@ export default async function AdminGamePage({
                     }`}
                   >
                     {new Date(s.date).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short' })} vs {s.opponent}
+                    {'game' in s && s.game && <span className="ml-1 text-[#22c55e]">✓</span>}
                   </Link>
                 ))}
               </div>
@@ -239,7 +256,12 @@ export default async function AdminGamePage({
 
             {/* Score */}
             <div className="glass-card rounded-2xl p-6">
-              <h3 className="text-sm font-bold text-[#94a3b8] mb-1">スコア</h3>
+              <div className="flex items-center gap-3 mb-1">
+                <h3 className="text-sm font-bold text-[#94a3b8]">スコア</h3>
+                {existingGame && (
+                  <span className="text-xs text-[#f59e0b] border border-[#f59e0b]/40 rounded px-2 py-0.5">編集中</span>
+                )}
+              </div>
               {selected && (
                 <p className="text-xs text-[#64748b] mb-4">
                   {new Date(selected.date).toLocaleDateString('ja-JP', {
@@ -252,16 +274,21 @@ export default async function AdminGamePage({
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <label className="block text-xs text-[#64748b] mb-1.5">BLITZ 得点 *</label>
-                  <input type="number" name="ourScore" min="0" required placeholder="0" className="text-2xl font-black text-center" />
+                  <input type="number" name="ourScore" min="0" required placeholder="0"
+                    defaultValue={existingGame?.ourScore ?? ''}
+                    className="text-2xl font-black text-center" />
                 </div>
                 <div>
                   <label className="block text-xs text-[#64748b] mb-1.5">相手 得点 *</label>
-                  <input type="number" name="opponentScore" min="0" required placeholder="0" className="text-2xl font-black text-center" />
+                  <input type="number" name="opponentScore" min="0" required placeholder="0"
+                    defaultValue={existingGame?.opponentScore ?? ''}
+                    className="text-2xl font-black text-center" />
                 </div>
               </div>
               <div className="mt-4">
                 <label className="block text-xs text-[#64748b] mb-1.5">コメント</label>
-                <input type="text" name="note" placeholder="試合のコメント（任意）" />
+                <input type="text" name="note" placeholder="試合のコメント（任意）"
+                  defaultValue={existingGame?.note ?? ''} />
               </div>
             </div>
 
@@ -300,13 +327,34 @@ export default async function AdminGamePage({
                     </thead>
                     <tbody>
                       {sortedPlayers.map((p) => {
-                        const entry = lineupMap.get(p.id)
-                        const isLineup = !!entry
+                        const entry    = lineupMap.get(p.id)
+                        const existing = existingStatMap.get(p.id)
+                        // 既存データがあれば常に表示、なければスタメン選手のみ表示
+                        const isVisible = !!entry || !!existing
+                        // 打順・守備: 既存データ優先 → スタメン → 空
+                        const defaultOrder = existing?.battingOrder ?? entry?.battingOrder ?? ''
+                        const defaultPos   = existing?.position    ?? entry?.position    ?? ''
+                        const statDefaults: Record<string, number | string> = {
+                          pa:  existing?.plateAppearances ?? '',
+                          ab:  existing?.atBats           ?? '',
+                          h:   existing?.hits             ?? '',
+                          '2b': existing?.doubles         ?? '',
+                          '3b': existing?.triples         ?? '',
+                          hr:  existing?.homeRuns         ?? '',
+                          rbi: existing?.rbi              ?? '',
+                          r:   existing?.runs             ?? '',
+                          bb:  existing?.walks            ?? '',
+                          k:   existing?.strikeouts       ?? '',
+                          sb:  existing?.stolenBases      ?? '',
+                          hbp: existing?.hitByPitch       ?? '',
+                          sac: existing?.sacrificeBunts   ?? '',
+                          sf:  existing?.sacrificeFlies   ?? '',
+                        }
                         return (
                           <tr
                             key={p.id}
                             className={`border-b border-[#0d1b2a] hover:bg-[#0d1b2a]/30 transition-colors ${
-                              isLineup ? '' : 'opacity-40'
+                              isVisible ? '' : 'opacity-40'
                             }`}
                           >
                             <td className="py-2 px-2 text-[#94a3b8] whitespace-nowrap text-xs">
@@ -319,9 +367,8 @@ export default async function AdminGamePage({
                               <input
                                 type="number"
                                 name={`order_${p.id}`}
-                                min="1"
-                                max="20"
-                                defaultValue={entry?.battingOrder ?? ''}
+                                min="1" max="20"
+                                defaultValue={defaultOrder}
                                 placeholder="–"
                                 className="w-12 text-center py-1 text-sm"
                               />
@@ -330,7 +377,7 @@ export default async function AdminGamePage({
                               <input
                                 type="text"
                                 name={`pos_${p.id}`}
-                                defaultValue={entry?.position ?? ''}
+                                defaultValue={defaultPos}
                                 placeholder="–"
                                 className="w-14 text-center py-1 text-sm"
                               />
@@ -342,6 +389,7 @@ export default async function AdminGamePage({
                                     type="number"
                                     name={`${stat}_${p.id}`}
                                     min="0"
+                                    defaultValue={statDefaults[stat] ?? ''}
                                     placeholder="–"
                                     className="w-10 text-center py-1 text-sm"
                                   />
@@ -381,12 +429,13 @@ export default async function AdminGamePage({
                   </thead>
                   <tbody>
                     {sortedPlayers.map((p) => {
-                      const isLineup = lineupPlayerIds.has(p.id)
+                      const existingP = existingPitchMap.get(p.id)
+                      const isVisible = lineupPlayerIds.has(p.id) || !!existingP
                       return (
                         <tr
                           key={p.id}
                           className={`border-b border-[#0d1b2a] hover:bg-[#0d1b2a]/30 transition-colors ${
-                            isLineup ? '' : 'opacity-40'
+                            isVisible ? '' : 'opacity-40'
                           }`}
                         >
                           <td className="py-2 px-2 text-[#94a3b8] whitespace-nowrap text-xs">
@@ -401,6 +450,7 @@ export default async function AdminGamePage({
                               name={`p_inn_${p.id}`}
                               placeholder="–"
                               pattern="^\d+(\.[12])?$"
+                              defaultValue={existingP?.innings ?? ''}
                               className="w-16 text-center py-1 text-sm"
                             />
                           </td>
@@ -410,26 +460,27 @@ export default async function AdminGamePage({
                               name={`p_pitches_${p.id}`}
                               min="0"
                               placeholder="–"
+                              defaultValue={existingP?.pitches ?? ''}
                               className="w-14 text-center py-1 text-sm"
                             />
                           </td>
                           <td className="py-1 px-0.5">
-                            <input type="number" name={`p_h_${p.id}`}  min="0" placeholder="–" className="w-10 text-center py-1 text-sm" />
+                            <input type="number" name={`p_h_${p.id}`}  min="0" placeholder="–" defaultValue={existingP?.hitsAllowed  ?? ''} className="w-10 text-center py-1 text-sm" />
                           </td>
                           <td className="py-1 px-0.5">
-                            <input type="number" name={`p_bb_${p.id}`} min="0" placeholder="–" className="w-10 text-center py-1 text-sm" />
+                            <input type="number" name={`p_bb_${p.id}`} min="0" placeholder="–" defaultValue={existingP?.walks        ?? ''} className="w-10 text-center py-1 text-sm" />
                           </td>
                           <td className="py-1 px-0.5">
-                            <input type="number" name={`p_k_${p.id}`}  min="0" placeholder="–" className="w-10 text-center py-1 text-sm" />
+                            <input type="number" name={`p_k_${p.id}`}  min="0" placeholder="–" defaultValue={existingP?.strikeouts   ?? ''} className="w-10 text-center py-1 text-sm" />
                           </td>
                           <td className="py-1 px-0.5">
-                            <input type="number" name={`p_r_${p.id}`}  min="0" placeholder="–" className="w-10 text-center py-1 text-sm" />
+                            <input type="number" name={`p_r_${p.id}`}  min="0" placeholder="–" defaultValue={existingP?.runsAllowed  ?? ''} className="w-10 text-center py-1 text-sm" />
                           </td>
                           <td className="py-1 px-0.5">
-                            <input type="number" name={`p_er_${p.id}`} min="0" placeholder="–" className="w-10 text-center py-1 text-sm" />
+                            <input type="number" name={`p_er_${p.id}`} min="0" placeholder="–" defaultValue={existingP?.earnedRuns ?? ''} className="w-10 text-center py-1 text-sm" />
                           </td>
                           <td className="py-1 px-1">
-                            <select name={`p_dec_${p.id}`} className="w-16 py-1 text-sm">
+                            <select name={`p_dec_${p.id}`} className="w-16 py-1 text-sm" defaultValue={existingP?.decision ?? ''}>
                               <option value="">–</option>
                               <option value="勝">勝</option>
                               <option value="負">負</option>
@@ -447,7 +498,8 @@ export default async function AdminGamePage({
 
             {lineConfigured && (
               <label className="flex items-center gap-2 text-sm text-[#22c55e] cursor-pointer select-none">
-                <input type="checkbox" name="sendLine" defaultChecked className="w-4 h-4 accent-[#22c55e]" />
+                {/* 編集時は誤送信防止のためデフォルト OFF */}
+                <input type="checkbox" name="sendLine" defaultChecked={!existingGame} className="w-4 h-4 accent-[#22c55e]" />
                 保存後にLINEに試合結果を送信する
               </label>
             )}
