@@ -57,6 +57,46 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
   const [bench,    setBench]    = useState<string[]>(initialData.bench ?? [])
   const [note,     setNote]     = useState(initialData.note)
 
+  // ─── 助っ人自動備考 ──────────────────────────────────────────────
+  // 現在いずれかのスロットで使われている助っ人名を「助っ人1,助っ人2」形式のキーに変換
+  const usedGuestKey = [...new Set([
+    ...slots.flatMap(s => [s.first.playerId, s.second.playerId]),
+    ...fpSlots.map(f => f.playerId),
+  ].filter(id => id.startsWith('__guest_')))]
+    .sort()
+    .map(id => GUEST_PLAYERS.find(g => g.id === id)?.name ?? '')
+    .filter(Boolean)
+    .join(',')
+
+  useEffect(() => {
+    const selectedNames = usedGuestKey.split(',').filter(Boolean)
+    setNote(prev => {
+      const lines = prev.split('\n')
+
+      // 既存の「助っ人X：...」行と、それ以外の行を分離
+      const existingGuestLines = new Map<string, string>()
+      const otherLines: string[] = []
+      for (const line of lines) {
+        const m = line.match(/^(助っ人\d+)：/)
+        if (m) existingGuestLines.set(m[1], line)
+        else   otherLines.push(line)
+      }
+
+      // 選択中の助っ人行を順に並べる（既入力内容を保持）
+      const guestLines = selectedNames.map(name =>
+        existingGuestLines.get(name) ?? `${name}：`
+      )
+
+      // 末尾の空行を除去
+      while (otherLines.length > 0 && otherLines[otherLines.length - 1].trim() === '') {
+        otherLines.pop()
+      }
+
+      return [...guestLines, ...otherLines].join('\n')
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usedGuestKey])
+
   // isPending が true → false になったタイミングで「保存しました」表示
   useEffect(() => {
     if (prevPendingRef.current && !isPending && saveState === 'saving') {
