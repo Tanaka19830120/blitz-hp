@@ -187,20 +187,22 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
     const ns = slots.map(s => ({ first: { ...s.first }, second: { ...s.second } }))
     const nf = fpSlots.map(f => ({ ...f }))
 
+    // 後半の実効ポジションを返す（second.positionが空の場合、前半と同じ選手なら first.position にフォールバック）
+    // "前半と同じ選手" = second.playerId が '' か first.playerId と一致
+    const effectiveSecondPos = (s: OrderSlot) => {
+      if (s.second.position !== '') return s.second.position
+      const samePlayer = s.second.playerId === '' || s.second.playerId === s.first.playerId
+      return samePlayer ? s.first.position : ''
+    }
+
     // idx の後半の実効ポジション（変更前）
-    const idxEffective = oldPos !== ''
-      ? oldPos
-      : (ns[idx].second.playerId === '' ? ns[idx].first.position : '')
+    const idxEffective = effectiveSecondPos(ns[idx])
 
     if (pos && pos !== 'DP') {
-      // 後半スロット内の重複チェック
-      // second.playerId="" (前半と同じ選手) の行も含め、実効ポジションで比較
+      // 後半スロット内の重複チェック（実効ポジションで比較）
       for (let i = 0; i < ns.length; i++) {
         if (i === idx) continue
-        const effPos = ns[i].second.position !== ''
-          ? ns[i].second.position
-          : (ns[i].second.playerId === '' ? ns[i].first.position : '')
-        if (effPos === pos) {
+        if (effectiveSecondPos(ns[i]) === pos) {
           ns[i].second.position = idxEffective
           break  // 最初の重複のみスワップ
         }
