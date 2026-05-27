@@ -183,23 +183,25 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
       <div>
         <h3 className="text-xs font-bold text-[#94a3b8] tracking-widest uppercase mb-3">スコア</h3>
         <div className="flex flex-wrap items-end gap-4">
-          <div>
+          <div style={{ width: '8rem' }}>
             <label className="block text-xs text-[#64748b] mb-1">BLITZ 得点</label>
             <input
               type="number" min="0" value={ourScore}
               onChange={e => setOurScore(e.target.value)}
               placeholder="0"
-              className="w-16 text-2xl font-black text-center"
+              style={{ width: '100%' }}
+              className="text-2xl font-black text-center"
             />
           </div>
           <div className="text-2xl font-black text-[#475569] pb-1">ー</div>
-          <div>
+          <div style={{ width: '8rem' }}>
             <label className="block text-xs text-[#64748b] mb-1">相手 得点</label>
             <input
               type="number" min="0" value={opponentScore}
               onChange={e => setOpponentScore(e.target.value)}
               placeholder="0"
-              className="w-16 text-2xl font-black text-center"
+              style={{ width: '100%' }}
+              className="text-2xl font-black text-center"
             />
           </div>
           <div className="flex-1 min-w-[12rem]">
@@ -536,18 +538,18 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
         </div>
 
         {lineConfigured && (
-          <div className="flex items-center gap-2">
+          <label className="flex items-center gap-2.5 cursor-pointer select-none w-full">
             <input
               type="checkbox"
-              id="sendLineCheck"
               checked={sendLine}
               onChange={e => setSendLine(e.target.checked)}
-              className="w-5 h-5 flex-none cursor-pointer accent-[#22c55e]"
+              style={{ width: '1.125rem', height: '1.125rem', flexShrink: 0 }}
+              className="cursor-pointer accent-[#22c55e]"
             />
-            <label htmlFor="sendLineCheck" className="text-sm text-[#22c55e] cursor-pointer select-none">
+            <span className="text-sm text-[#22c55e]">
               保存後にLINEに試合結果を送信する
-            </label>
-          </div>
+            </span>
+          </label>
         )}
 
         <button

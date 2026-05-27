@@ -181,18 +181,37 @@ body {
   font-size: 0.75rem;
 }
 
-input, select, textarea {
-  background: #0d1b2a;
-  color: #e2e8f0;
-  border: 1px solid #1e3a5f;
-  border-radius: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  width: 100%;
-  outline: none;
-  transition: border-color 0.2s;
-}
+/* input/select/textarea リセット — @layer base に入れることで
+   Tailwind utilities (w-16 など) が正しく上書きできるようにする */
+@layer base {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]),
+  select,
+  textarea {
+    background: #0d1b2a;
+    color: #e2e8f0;
+    border: 1px solid #1e3a5f;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.2s;
+  }
 
-input:focus, select:focus, textarea:focus {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):focus,
+  select:focus,
+  textarea:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+  }
+
+  /* checkbox / radio は幅・背景をリセットしない */
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: auto;
+    height: auto;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+  }
 }
