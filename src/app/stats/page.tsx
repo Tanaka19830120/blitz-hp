@@ -376,29 +376,30 @@ export default async function StatsPage({
                       </div>
                     )}
                     <div className="glass-card rounded-2xl overflow-hidden">
+                      <p className="text-[10px] text-[#475569] pt-3 px-4 sm:hidden">← 横スクロールで全成績を確認</p>
                       <div className="overflow-x-auto">
-                        <table className="w-full text-sm min-w-[900px]">
+                        <table className="w-full text-sm min-w-[380px]">
                           <thead>
                             <tr className="border-b border-[#1e3a5f]">
                               <th className="text-left px-4 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">選手</th>
-                              <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">試合</th>
-                              <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">打席</th>
+                              <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase hidden sm:table-cell">試合</th>
+                              <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase hidden sm:table-cell">打席</th>
                               <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">打数</th>
                               <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">安打</th>
-                              <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">2B</th>
-                              <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">3B</th>
-                              <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">本</th>
+                              <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase hidden sm:table-cell">2B</th>
+                              <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase hidden sm:table-cell">3B</th>
+                              <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase hidden sm:table-cell">本</th>
                               <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">打点</th>
-                              <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">得点</th>
-                              <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">盗塁</th>
-                              <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">四球</th>
-                              <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">三振</th>
-                              <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">死球</th>
-                              <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">犠打</th>
-                              <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">犠飛</th>
+                              <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase hidden sm:table-cell">得点</th>
+                              <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase hidden sm:table-cell">盗塁</th>
+                              <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase hidden sm:table-cell">四球</th>
+                              <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase hidden sm:table-cell">三振</th>
+                              <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase hidden sm:table-cell">死球</th>
+                              <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase hidden sm:table-cell">犠打</th>
+                              <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase hidden sm:table-cell">犠飛</th>
                               <th className="text-center px-3 py-4 text-xs font-bold tracking-wider text-[#60a5fa] uppercase">打率</th>
-                              <th className="text-center px-3 py-4 text-xs font-bold tracking-wider text-[#94a3b8] uppercase">出塁率</th>
-                              <th className="text-center px-3 py-4 text-xs font-bold tracking-wider text-[#94a3b8] uppercase">長打率</th>
+                              <th className="text-center px-3 py-4 text-xs font-bold tracking-wider text-[#94a3b8] uppercase hidden sm:table-cell">出塁率</th>
+                              <th className="text-center px-3 py-4 text-xs font-bold tracking-wider text-[#94a3b8] uppercase hidden sm:table-cell">長打率</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -427,21 +428,21 @@ export default async function StatsPage({
                                     </div>
                                   </Link>
                                 </td>
-                                <td className="text-center px-2 py-3 text-[#94a3b8]">{p.games}</td>
-                                <td className="text-center px-2 py-3 text-[#94a3b8]">{p.plateAppearances}</td>
+                                <td className="text-center px-2 py-3 text-[#94a3b8] hidden sm:table-cell">{p.games}</td>
+                                <td className="text-center px-2 py-3 text-[#94a3b8] hidden sm:table-cell">{p.plateAppearances}</td>
                                 <td className="text-center px-2 py-3 text-[#94a3b8]">{p.atBats}</td>
                                 <td className="text-center px-2 py-3 text-[#94a3b8]">{p.hits}</td>
-                                <td className="text-center px-2 py-3 text-[#94a3b8]">{p.doubles}</td>
-                                <td className="text-center px-2 py-3 text-[#94a3b8]">{p.triples}</td>
-                                <td className="text-center px-2 py-3">{p.homeRuns > 0 ? <span className="text-[#fbbf24] font-bold">{p.homeRuns}</span> : <span className="text-[#475569]">0</span>}</td>
+                                <td className="text-center px-2 py-3 text-[#94a3b8] hidden sm:table-cell">{p.doubles}</td>
+                                <td className="text-center px-2 py-3 text-[#94a3b8] hidden sm:table-cell">{p.triples}</td>
+                                <td className="text-center px-2 py-3 hidden sm:table-cell">{p.homeRuns > 0 ? <span className="text-[#fbbf24] font-bold">{p.homeRuns}</span> : <span className="text-[#475569]">0</span>}</td>
                                 <td className="text-center px-2 py-3">{p.rbi > 0 ? <span className="text-[#60a5fa]">{p.rbi}</span> : <span className="text-[#475569]">0</span>}</td>
-                                <td className="text-center px-2 py-3 text-[#94a3b8]">{p.runs}</td>
-                                <td className="text-center px-2 py-3 text-[#94a3b8]">{p.stolenBases}</td>
-                                <td className="text-center px-2 py-3 text-[#94a3b8]">{p.walks}</td>
-                                <td className="text-center px-2 py-3 text-[#94a3b8]">{p.strikeouts}</td>
-                                <td className="text-center px-2 py-3 text-[#94a3b8]">{p.hitByPitch}</td>
-                                <td className="text-center px-2 py-3 text-[#94a3b8]">{p.sacrificeBunts}</td>
-                                <td className="text-center px-2 py-3 text-[#94a3b8]">{p.sacrificeFlies}</td>
+                                <td className="text-center px-2 py-3 text-[#94a3b8] hidden sm:table-cell">{p.runs}</td>
+                                <td className="text-center px-2 py-3 text-[#94a3b8] hidden sm:table-cell">{p.stolenBases}</td>
+                                <td className="text-center px-2 py-3 text-[#94a3b8] hidden sm:table-cell">{p.walks}</td>
+                                <td className="text-center px-2 py-3 text-[#94a3b8] hidden sm:table-cell">{p.strikeouts}</td>
+                                <td className="text-center px-2 py-3 text-[#94a3b8] hidden sm:table-cell">{p.hitByPitch}</td>
+                                <td className="text-center px-2 py-3 text-[#94a3b8] hidden sm:table-cell">{p.sacrificeBunts}</td>
+                                <td className="text-center px-2 py-3 text-[#94a3b8] hidden sm:table-cell">{p.sacrificeFlies}</td>
                                 <td className="text-center px-3 py-3">
                                   <span className={`font-black text-base ${
                                     p.avg === '---'
@@ -455,8 +456,8 @@ export default async function StatsPage({
                                     {p.avg}
                                   </span>
                                 </td>
-                                <td className="text-center px-3 py-3 text-[#94a3b8] font-mono text-xs">{p.obp}</td>
-                                <td className="text-center px-3 py-3 text-[#94a3b8] font-mono text-xs">{p.slg}</td>
+                                <td className="text-center px-3 py-3 text-[#94a3b8] font-mono text-xs hidden sm:table-cell">{p.obp}</td>
+                                <td className="text-center px-3 py-3 text-[#94a3b8] font-mono text-xs hidden sm:table-cell">{p.slg}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -474,23 +475,24 @@ export default async function StatsPage({
             <div className="mb-10">
               <h2 className="text-xs font-bold tracking-[0.3em] text-[#a78bfa] uppercase mb-4">投手成績</h2>
               <div className="glass-card rounded-2xl overflow-hidden">
+                <p className="text-[10px] text-[#475569] pt-3 px-4 sm:hidden">← 横スクロールで全成績を確認</p>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm min-w-[700px]">
+                  <table className="w-full text-sm min-w-[320px]">
                     <thead>
                       <tr className="border-b border-[#1e3a5f]">
                         <th className="text-left px-4 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">選手</th>
-                        <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">試合</th>
+                        <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase hidden sm:table-cell">試合</th>
                         <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">勝</th>
                         <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">負</th>
-                        <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">S</th>
-                        <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">H</th>
+                        <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase hidden sm:table-cell">S</th>
+                        <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase hidden sm:table-cell">H</th>
                         <th className="text-center px-3 py-4 text-xs font-bold tracking-wider text-[#a78bfa] uppercase">防御率</th>
                         <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">投球回</th>
-                        <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">奪三振</th>
-                        <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">与四球</th>
-                        <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">被安打</th>
-                        <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">自責点</th>
-                        <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase">投球数</th>
+                        <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase hidden sm:table-cell">奪三振</th>
+                        <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase hidden sm:table-cell">与四球</th>
+                        <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase hidden sm:table-cell">被安打</th>
+                        <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase hidden sm:table-cell">自責点</th>
+                        <th className="text-center px-2 py-4 text-xs font-bold tracking-wider text-[#64748b] uppercase hidden sm:table-cell">投球数</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -519,17 +521,17 @@ export default async function StatsPage({
                               </div>
                             </Link>
                           </td>
-                          <td className="text-center px-2 py-3 text-[#94a3b8]">{p.games}</td>
+                          <td className="text-center px-2 py-3 text-[#94a3b8] hidden sm:table-cell">{p.games}</td>
                           <td className="text-center px-2 py-3">
                             {p.wins > 0 ? <span className="text-[#22c55e] font-bold">{p.wins}</span> : <span className="text-[#475569]">0</span>}
                           </td>
                           <td className="text-center px-2 py-3">
                             {p.losses > 0 ? <span className="text-[#ef4444]">{p.losses}</span> : <span className="text-[#475569]">0</span>}
                           </td>
-                          <td className="text-center px-2 py-3">
+                          <td className="text-center px-2 py-3 hidden sm:table-cell">
                             {p.saves > 0 ? <span className="text-[#60a5fa] font-bold">{p.saves}</span> : <span className="text-[#475569]">0</span>}
                           </td>
-                          <td className="text-center px-2 py-3">
+                          <td className="text-center px-2 py-3 hidden sm:table-cell">
                             {p.holds > 0 ? <span className="text-[#fbbf24]">{p.holds}</span> : <span className="text-[#475569]">0</span>}
                           </td>
                           <td className="text-center px-3 py-3">
@@ -546,11 +548,11 @@ export default async function StatsPage({
                             </span>
                           </td>
                           <td className="text-center px-2 py-3 text-[#94a3b8] font-mono text-xs">{displayInnings(p.outs)}</td>
-                          <td className="text-center px-2 py-3 text-[#94a3b8]">{p.strikeouts}</td>
-                          <td className="text-center px-2 py-3 text-[#94a3b8]">{p.walks}</td>
-                          <td className="text-center px-2 py-3 text-[#94a3b8]">{p.hitsAllowed}</td>
-                          <td className="text-center px-2 py-3 text-[#94a3b8]">{p.earnedRuns}</td>
-                          <td className="text-center px-2 py-3 text-[#64748b] text-xs">{p.pitches > 0 ? p.pitches : '—'}</td>
+                          <td className="text-center px-2 py-3 text-[#94a3b8] hidden sm:table-cell">{p.strikeouts}</td>
+                          <td className="text-center px-2 py-3 text-[#94a3b8] hidden sm:table-cell">{p.walks}</td>
+                          <td className="text-center px-2 py-3 text-[#94a3b8] hidden sm:table-cell">{p.hitsAllowed}</td>
+                          <td className="text-center px-2 py-3 text-[#94a3b8] hidden sm:table-cell">{p.earnedRuns}</td>
+                          <td className="text-center px-2 py-3 text-[#64748b] text-xs hidden sm:table-cell">{p.pitches > 0 ? p.pitches : '—'}</td>
                         </tr>
                       ))}
                     </tbody>

@@ -4,8 +4,6 @@ import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
 import { getMasterList, getGameTypeLabels } from '@/lib/settings'
 
-export const dynamic = 'force-dynamic'
-
 // ─── 新規追加 ──────────────────────────────────────────────────────
 async function createSchedule(formData: FormData) {
   'use server'
@@ -39,6 +37,48 @@ async function createSchedule(formData: FormData) {
   redirect('/admin')
 }
 
+// ─── 同日に試合を追加 ──────────────────────────────────────────────
+async function addGameToDay(formData: FormData) {
+  'use server'
+  const existingId = String(formData.get('existingId'))
+  const opponentSelect = String(formData.get('opponentSelect') || '').trim()
+  const opponentCustom = String(formData.get('opponentCustom') || '').trim()
+  const opponent = (opponentSelect === '__custom__' ? opponentCustom : opponentSelect) || opponentCustom
+  const locationSelect = String(formData.get('locationSelect') || '').trim()
+  const locationCustom = String(formData.get('locationCustom') || '').trim()
+  const location = (locationSelect === '__custom__' ? locationCustom : locationSelect) || locationCustom
+  const startTime = String(formData.get('startTime') || '').trim()
+
+  if (!opponent || !location) return
+
+  const existing = await prisma.schedule.findUnique({ where: { id: existingId } })
+  if (!existing) return
+
+  // dayGroupId: use existing one or create new
+  let groupId = existing.dayGroupId
+  if (!groupId) {
+    // Generate a new group ID
+    groupId = existingId  // use the primary schedule's ID as group key
+    await prisma.schedule.update({ where: { id: existingId }, data: { dayGroupId: groupId } })
+  }
+
+  await prisma.schedule.create({
+    data: {
+      date:       existing.date,
+      opponent,
+      location,
+      type:       existing.type,
+      meetTime:   existing.meetTime,
+      startTime:  startTime || null,
+      note:       null,
+      dayGroupId: groupId,
+    },
+  })
+  revalidatePath('/schedule')
+  revalidatePath('/admin')
+  redirect('/admin/schedule')
+}
+
 // ─── 編集・更新 ──────────────────────────────────────────────────────
 async function updateSchedule(formData: FormData) {
   'use server'
@@ -49,8 +89,16 @@ async function updateSchedule(formData: FormData) {
   const startTime = String(formData.get('startTime') || '').trim()
   const typeRaw   = String(formData.get('type') || 'PRACTICE')
   const type = (['REGULAR', 'PRACTICE', 'TOURNAMENT', 'EVENT'].includes(typeRaw) ? typeRaw : 'REGULAR') as 'REGULAR' | 'PRACTICE' | 'TOURNAMENT' | 'EVENT'
-  const opponent = String(formData.get('opponent') || '').trim()
-  const location = String(formData.get('location') || '').trim()
+
+  // Same select+custom pattern as create form
+  const opponentSelect = String(formData.get('opponentSelect') || '').trim()
+  const opponentCustom = String(formData.get('opponentCustom') || '').trim()
+  const opponent = (opponentSelect === '__custom__' ? opponentCustom : opponentSelect) || opponentCustom
+
+  const locationSelect = String(formData.get('locationSelect') || '').trim()
+  const locationCustom = String(formData.get('locationCustom') || '').trim()
+  const location = (locationSelect === '__custom__' ? locationCustom : locationSelect) || locationCustom
+
   if (!opponent || !location) return
 
   await prisma.schedule.update({
@@ -65,6 +113,25 @@ async function updateSchedule(formData: FormData) {
   revalidatePath('/schedule')
   revalidatePath('/admin')
   redirect('/admin/schedule')
+}
+
+// ─── グループ解除 ─────────────────────────────────────────────────
+async function unlinkFromGroup(formData: FormData) {
+  'use server'
+  const id = String(formData.get('id'))
+  const schedule = await prisma.schedule.findUnique({ where: { id } })
+  if (!schedule?.dayGroupId) return
+
+  const groupId = schedule.dayGroupId
+  const members = await prisma.schedule.findMany({ where: { dayGroupId: groupId } })
+  // If only 2 in group, also clear the other one's dayGroupId
+  if (members.length <= 2) {
+    await prisma.schedule.updateMany({ where: { dayGroupId: groupId }, data: { dayGroupId: null } })
+  } else {
+    await prisma.schedule.update({ where: { id }, data: { dayGroupId: null } })
+  }
+  revalidatePath('/schedule')
+  revalidatePath('/admin')
 }
 
 // ─── 削除 ────────────────────────────────────────────────────────────
@@ -83,17 +150,68 @@ function toDateInput(d: Date) {
   return `${y}-${m}-${dd}`
 }
 
+// ─── 対戦相手・場所の選択フォーム ──────────────────────────────────
+function OpponentSelect({ opponents, defaultValue = '' }: { opponents: string[]; defaultValue?: string }) {
+  const isCustom = defaultValue && !opponents.includes(defaultValue)
+  return opponents.length > 0 ? (
+    <>
+      <select name="opponentSelect" className="mb-2" defaultValue={isCustom ? '__custom__' : defaultValue}>
+        <option value="">── 選択してください ──</option>
+        {opponents.map(o => <option key={o} value={o}>{o}</option>)}
+        <option value="__custom__">その他（直接入力）...</option>
+      </select>
+      <input type="text" name="opponentCustom" defaultValue={isCustom ? defaultValue : ''} placeholder="マスタにない場合は直接入力" className="text-sm" />
+      <p className="text-[10px] text-[#475569] mt-1">
+        新しいチームを追加するには<Link href="/admin/masters" className="text-[#60a5fa] ml-1 hover:underline">マスタ管理</Link>へ
+      </p>
+    </>
+  ) : (
+    <>
+      <input type="text" name="opponentCustom" required defaultValue={defaultValue} placeholder="チーム名" />
+      <p className="text-[10px] text-[#fbbf24] mt-1">
+        ⚠ マスタが空です。<Link href="/admin/masters" className="text-[#60a5fa] ml-1 hover:underline">マスタ管理</Link>で登録するとプルダウンで選べます。
+      </p>
+    </>
+  )
+}
+
+function LocationSelect({ locations, defaultValue = '' }: { locations: string[]; defaultValue?: string }) {
+  const isCustom = defaultValue && !locations.includes(defaultValue)
+  return locations.length > 0 ? (
+    <>
+      <select name="locationSelect" className="mb-2" defaultValue={isCustom ? '__custom__' : defaultValue}>
+        <option value="">── 選択してください ──</option>
+        {locations.map(l => <option key={l} value={l}>{l}</option>)}
+        <option value="__custom__">その他（直接入力）...</option>
+      </select>
+      <input type="text" name="locationCustom" defaultValue={isCustom ? defaultValue : ''} placeholder="マスタにない場合は直接入力" className="text-sm" />
+      <p className="text-[10px] text-[#475569] mt-1">
+        新しい球場を追加するには<Link href="/admin/masters" className="text-[#60a5fa] ml-1 hover:underline">マスタ管理</Link>へ
+      </p>
+    </>
+  ) : (
+    <>
+      <input type="text" name="locationCustom" required defaultValue={defaultValue} placeholder="球場名" />
+      <p className="text-[10px] text-[#fbbf24] mt-1">
+        ⚠ マスタが空です。<Link href="/admin/masters" className="text-[#60a5fa] ml-1 hover:underline">マスタ管理</Link>で登録するとプルダウンで選べます。
+      </p>
+    </>
+  )
+}
+
+export const dynamic = 'force-dynamic'
+
 export default async function AdminSchedulePage({
   searchParams,
 }: {
-  searchParams: Promise<{ edit?: string }>
+  searchParams: Promise<{ edit?: string; addTo?: string }>
 }) {
   const sp = await searchParams
 
   const [schedules, opponents, locations, gameTypeLabels] = await Promise.all([
     prisma.schedule.findMany({
       orderBy: { date: 'desc' },
-      take: 50,
+      take: 60,
       include: { game: { select: { id: true } } },
     }),
     getMasterList('opponentMaster'),
@@ -102,29 +220,78 @@ export default async function AdminSchedulePage({
   ])
 
   const editId = sp.edit
+  const addToId = sp.addTo  // "この試合に2試合目を追加"
+
   const editSchedule = editId
     ? (schedules.find(s => s.id === editId) ??
        await prisma.schedule.findUnique({ where: { id: editId }, include: { game: { select: { id: true } } } }))
     : null
 
+  const addToSchedule = addToId
+    ? (schedules.find(s => s.id === addToId) ??
+       await prisma.schedule.findUnique({ where: { id: addToId } }))
+    : null
+
   const TYPES = ['REGULAR', 'PRACTICE', 'TOURNAMENT', 'EVENT'] as const
+
+  // Group schedules by dayGroupId for display
+  const groupMap = new Map<string, typeof schedules>()
+  const ungrouped: typeof schedules = []
+  for (const s of schedules) {
+    if (s.dayGroupId) {
+      if (!groupMap.has(s.dayGroupId)) groupMap.set(s.dayGroupId, [])
+      groupMap.get(s.dayGroupId)!.push(s)
+    } else {
+      ungrouped.push(s)
+    }
+  }
 
   return (
     <div className="pt-16 max-w-4xl mx-auto px-4 py-12">
       <div className="flex items-center gap-4 mb-8">
         <Link href="/admin" className="text-[#64748b] hover:text-[#94a3b8]">← 管理</Link>
         <h1 className="text-2xl font-black text-[#e2e8f0]">
-          {editSchedule ? '日程を編集' : '日程を追加'}
+          {editSchedule ? '日程を編集' : addToSchedule ? '試合を追加' : '日程を追加'}
         </h1>
-        {editSchedule && (
+        {(editSchedule || addToSchedule) && (
           <Link href="/admin/schedule" className="text-xs text-[#64748b] hover:text-[#94a3b8] ml-auto">
             ＋ 新規追加に戻る
           </Link>
         )}
       </div>
 
+      {/* ── 2試合目追加フォーム ── */}
+      {addToSchedule && (
+        <div className="glass-card rounded-2xl p-6 mb-8 border border-[#a78bfa]/30">
+          <p className="text-xs text-[#a78bfa] mb-1">
+            🔗 同日グループに追加:
+            {new Date(addToSchedule.date).toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}
+            　vs {addToSchedule.opponent}
+          </p>
+          <p className="text-xs text-[#64748b] mb-4">集合時間・日付は親試合から引き継がれます。</p>
+          <form action={addGameToDay} className="grid gap-4 sm:grid-cols-2">
+            <input type="hidden" name="existingId" value={addToSchedule.id} />
+            <div>
+              <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">対戦相手 *</label>
+              <OpponentSelect opponents={opponents} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">場所 *</label>
+              <LocationSelect locations={locations} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">試合開始</label>
+              <input type="time" name="startTime" />
+            </div>
+            <div className="sm:col-span-2">
+              <button type="submit" className="btn-primary w-full py-2.5">同日グループに追加する</button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* ── 編集フォーム ── */}
-      {editSchedule ? (
+      {editSchedule && !addToSchedule ? (
         <div className="glass-card rounded-2xl p-6 mb-8 border border-[#f59e0b]/30">
           <p className="text-xs text-[#f59e0b] mb-4">
             編集中: {new Date(editSchedule.date).toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}
@@ -146,11 +313,11 @@ export default async function AdminSchedulePage({
             </div>
             <div>
               <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">対戦相手 *</label>
-              <input type="text" name="opponent" required defaultValue={editSchedule.opponent} placeholder="チーム名" />
+              <OpponentSelect opponents={opponents} defaultValue={editSchedule.opponent} />
             </div>
             <div>
               <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">場所 *</label>
-              <input type="text" name="location" required defaultValue={editSchedule.location} placeholder="球場名" />
+              <LocationSelect locations={locations} defaultValue={editSchedule.location} />
             </div>
             <div>
               <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">集合時間</label>
@@ -169,7 +336,7 @@ export default async function AdminSchedulePage({
             </div>
           </form>
         </div>
-      ) : (
+      ) : !addToSchedule ? (
         /* ── 新規追加フォーム ── */
         <div className="glass-card rounded-2xl p-6 mb-8">
           <form action={createSchedule} className="grid gap-4 sm:grid-cols-2">
@@ -187,49 +354,11 @@ export default async function AdminSchedulePage({
             </div>
             <div>
               <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">対戦相手 *</label>
-              {opponents.length > 0 ? (
-                <>
-                  <select name="opponentSelect" className="mb-2">
-                    <option value="">── 選択してください ──</option>
-                    {opponents.map(o => <option key={o} value={o}>{o}</option>)}
-                    <option value="__custom__">その他（直接入力）...</option>
-                  </select>
-                  <input type="text" name="opponentCustom" placeholder="マスタにない場合は直接入力" className="text-sm" />
-                  <p className="text-[10px] text-[#475569] mt-1">
-                    新しいチームを追加するには<Link href="/admin/masters" className="text-[#60a5fa] ml-1 hover:underline">マスタ管理</Link>へ
-                  </p>
-                </>
-              ) : (
-                <>
-                  <input type="text" name="opponentCustom" required placeholder="チーム名" />
-                  <p className="text-[10px] text-[#fbbf24] mt-1">
-                    ⚠ マスタが空です。<Link href="/admin/masters" className="text-[#60a5fa] ml-1 hover:underline">マスタ管理</Link>で登録するとプルダウンで選べます。
-                  </p>
-                </>
-              )}
+              <OpponentSelect opponents={opponents} />
             </div>
             <div>
               <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">場所 *</label>
-              {locations.length > 0 ? (
-                <>
-                  <select name="locationSelect" className="mb-2">
-                    <option value="">── 選択してください ──</option>
-                    {locations.map(l => <option key={l} value={l}>{l}</option>)}
-                    <option value="__custom__">その他（直接入力）...</option>
-                  </select>
-                  <input type="text" name="locationCustom" placeholder="マスタにない場合は直接入力" className="text-sm" />
-                  <p className="text-[10px] text-[#475569] mt-1">
-                    新しい球場を追加するには<Link href="/admin/masters" className="text-[#60a5fa] ml-1 hover:underline">マスタ管理</Link>へ
-                  </p>
-                </>
-              ) : (
-                <>
-                  <input type="text" name="locationCustom" required placeholder="球場名" />
-                  <p className="text-[10px] text-[#fbbf24] mt-1">
-                    ⚠ マスタが空です。<Link href="/admin/masters" className="text-[#60a5fa] ml-1 hover:underline">マスタ管理</Link>で登録するとプルダウンで選べます。
-                  </p>
-                </>
-              )}
+              <LocationSelect locations={locations} />
             </div>
             <div>
               <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">集合時間</label>
@@ -248,48 +377,66 @@ export default async function AdminSchedulePage({
             </div>
           </form>
         </div>
-      )}
+      ) : null}
 
       {/* ── 登録済み日程一覧 ── */}
       <h2 className="text-xs font-bold tracking-[0.3em] text-[#60a5fa] uppercase mb-4">
-        登録済み日程（直近50件）
+        登録済み日程（直近60件）
       </h2>
       <div className="flex flex-col gap-2">
         {schedules.map((s) => (
           <div key={s.id}
-            className={`glass-card rounded-xl px-4 py-3 flex items-center justify-between gap-3 ${
-              s.id === editId ? 'border border-[#f59e0b]/40' : ''
-            }`}>
-            <div className="min-w-0 flex-1">
-              <span className="text-sm font-medium text-[#e2e8f0]">vs {s.opponent}</span>
-              <span className="text-xs text-[#64748b] ml-3">
-                {new Date(s.date).toLocaleDateString('ja-JP', { year: 'numeric', month: 'short', day: 'numeric' })}
-              </span>
-              <span className="text-xs text-[#475569] ml-2">📍 {s.location}</span>
-            </div>
-            <div className="flex items-center gap-3 shrink-0">
-              <span className={`text-xs ${
-                s.type === 'REGULAR'    ? 'text-[#60a5fa]' :
-                s.type === 'TOURNAMENT' ? 'text-[#fbbf24]' :
-                s.type === 'EVENT'      ? 'text-[#a78bfa]' : 'text-[#94a3b8]'
-              }`}>
-                {gameTypeLabels[s.type] ?? s.type}
-              </span>
-              {s.game && <span className="text-xs text-[#22c55e]">✓ 結果入力済</span>}
-              <Link
-                href={`/admin/schedule?edit=${s.id}`}
-                className="text-xs text-[#60a5fa]/70 hover:text-[#60a5fa] transition-colors"
-              >
-                編集
-              </Link>
-              {!s.game && (
-                <form action={deleteSchedule}>
-                  <input type="hidden" name="id" value={s.id} />
-                  <button type="submit" className="text-xs text-[#ef4444]/60 hover:text-[#ef4444] transition-colors">
-                    削除
-                  </button>
-                </form>
-              )}
+            className={`glass-card rounded-xl px-4 py-3 ${
+              s.dayGroupId ? 'border-l-2 border-[#a78bfa]/50' : ''
+            } ${s.id === editId ? 'border border-[#f59e0b]/40' : ''}`}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <span className="text-sm font-medium text-[#e2e8f0]">vs {s.opponent}</span>
+                <span className="text-xs text-[#64748b] ml-3">
+                  {new Date(s.date).toLocaleDateString('ja-JP', { year: 'numeric', month: 'short', day: 'numeric' })}
+                </span>
+                <span className="text-xs text-[#475569] ml-2">📍 {s.location}</span>
+                {s.dayGroupId && <span className="text-xs text-[#a78bfa] ml-2">🔗 複数試合</span>}
+              </div>
+              <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                <span className={`text-xs ${
+                  s.type === 'REGULAR'    ? 'text-[#60a5fa]' :
+                  s.type === 'TOURNAMENT' ? 'text-[#fbbf24]' :
+                  s.type === 'EVENT'      ? 'text-[#a78bfa]' : 'text-[#94a3b8]'
+                }`}>
+                  {gameTypeLabels[s.type] ?? s.type}
+                </span>
+                {s.game && <span className="text-xs text-[#22c55e]">✓ 結果入力済</span>}
+                <Link
+                  href={`/admin/schedule?edit=${s.id}`}
+                  className="text-xs text-[#60a5fa]/70 hover:text-[#60a5fa] transition-colors"
+                >
+                  編集
+                </Link>
+                <Link
+                  href={`/admin/schedule?addTo=${s.id}`}
+                  className="text-xs text-[#a78bfa]/70 hover:text-[#a78bfa] transition-colors"
+                  title="この日に別の試合を追加"
+                >
+                  ＋試合追加
+                </Link>
+                {s.dayGroupId && (
+                  <form action={unlinkFromGroup}>
+                    <input type="hidden" name="id" value={s.id} />
+                    <button type="submit" className="text-xs text-[#64748b]/60 hover:text-[#94a3b8] transition-colors">
+                      グループ解除
+                    </button>
+                  </form>
+                )}
+                {!s.game && (
+                  <form action={deleteSchedule}>
+                    <input type="hidden" name="id" value={s.id} />
+                    <button type="submit" className="text-xs text-[#ef4444]/60 hover:text-[#ef4444] transition-colors">
+                      削除
+                    </button>
+                  </form>
+                )}
+              </div>
             </div>
           </div>
         ))}

@@ -173,31 +173,32 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
 
       {/* 打者成績 */}
       {battingStats.length > 0 ? (
-        <div className="glass-card rounded-2xl p-4 mb-6 overflow-x-auto">
-          <h2 className="text-sm font-bold text-[#94a3b8] uppercase tracking-wider mb-3">
+        <div className="glass-card rounded-2xl p-4 mb-6">
+          <h2 className="text-sm font-bold text-[#94a3b8] uppercase tracking-wider mb-2">
             打者成績
           </h2>
-          <table className="w-full text-sm border-collapse min-w-[800px]">
+          <p className="text-[10px] text-[#475569] mb-2 sm:hidden">← 横スクロールで全成績を確認</p>
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse min-w-[420px]">
             <thead>
               <tr className="text-xs text-[#64748b] border-b border-[#1e3a5f]">
                 <th className="py-2 pr-1 text-center w-6">#</th>
                 <th className="py-2 px-2 text-left">選手</th>
-                <th className="py-2 px-2 text-center w-10">守備</th>
-                <th className="py-2 px-2 text-center w-10" title="打席">打席</th>
+                <th className="py-2 px-2 text-center w-10 hidden sm:table-cell">守備</th>
+                <th className="py-2 px-2 text-center w-10 hidden sm:table-cell" title="打席">打席</th>
                 <th className="py-2 px-2 text-center w-10" title="打数">打数</th>
                 <th className="py-2 px-2 text-center w-10" title="安打">安打</th>
                 <th className="py-2 px-2 text-center w-12" title="打率">打率</th>
-                <th className="py-2 px-2 text-center w-10" title="本塁打">本</th>
+                <th className="py-2 px-2 text-center w-10 hidden sm:table-cell" title="本塁打">本</th>
                 <th className="py-2 px-2 text-center w-10" title="打点">打点</th>
-                <th className="py-2 px-2 text-center w-10" title="得点">得点</th>
-                <th className="py-2 px-2 text-center w-10" title="盗塁">盗塁</th>
-                <th className="py-2 px-2 text-center w-10" title="二塁打">2B</th>
-                <th className="py-2 px-2 text-center w-10" title="三塁打">3B</th>
-                <th className="py-2 px-2 text-center w-10" title="三振">三振</th>
-                <th className="py-2 px-2 text-center w-10" title="四球">四球</th>
-                <th className="py-2 px-2 text-center w-10" title="死球">死球</th>
-                <th className="py-2 px-2 text-center w-10" title="犠打">犠打</th>
-                <th className="py-2 px-2 text-center w-10" title="犠飛">犠飛</th>
+                <th className="py-2 px-2 text-center w-10 hidden sm:table-cell" title="得点">得点</th>
+                <th className="py-2 px-2 text-center w-10 hidden sm:table-cell" title="盗塁">盗塁</th>
+                <th className="py-2 px-2 text-center w-10 hidden sm:table-cell" title="二塁打">2B</th>
+                <th className="py-2 px-2 text-center w-10 hidden sm:table-cell" title="三塁打">3B</th>
+                <th className="py-2 px-2 text-center w-10 hidden sm:table-cell" title="四球">四球</th>
+                <th className="py-2 px-2 text-center w-10 hidden sm:table-cell" title="死球">死球</th>
+                <th className="py-2 px-2 text-center w-10 hidden sm:table-cell" title="犠打">犠打</th>
+                <th className="py-2 px-2 text-center w-10 hidden sm:table-cell" title="犠飛">犠飛</th>
               </tr>
             </thead>
             <tbody>
@@ -209,29 +210,28 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
                   <tr key={s.id} className={`border-b border-[#0f2035]/60 hover:bg-[#1e3a5f]/10 ${i % 2 === 0 ? '' : 'bg-[#0a1628]/20'}`}>
                     <td className="py-2 pr-1 text-center text-[#64748b] text-xs">{s.battingOrder ?? '–'}</td>
                     <td className="py-2 px-2">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         {s.user.number != null && (
-                          <span className="text-xs text-[#475569] w-6 text-right">{s.user.number}</span>
+                          <span className="text-xs text-[#475569] w-5 text-right shrink-0">{s.user.number}</span>
                         )}
-                        <span className="font-medium text-[#e2e8f0]">{s.user.name}</span>
+                        <span className="font-medium text-[#e2e8f0] text-sm">{s.user.name}</span>
                       </div>
                     </td>
-                    <td className="py-2 px-2 text-center text-[#64748b] text-xs">{s.position ?? '–'}</td>
-                    <td className="py-2 px-2 text-center text-[#94a3b8]">{s.plateAppearances || '–'}</td>
+                    <td className="py-2 px-2 text-center text-[#64748b] text-xs hidden sm:table-cell">{s.position ?? '–'}</td>
+                    <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{s.plateAppearances || '–'}</td>
                     <td className="py-2 px-2 text-center text-[#94a3b8]">{s.atBats}</td>
                     <td className="py-2 px-2 text-center font-bold text-[#e2e8f0]">{s.hits}</td>
                     <td className={`py-2 px-2 text-center font-mono text-xs ${s.atBats > 0 && s.hits / s.atBats >= 0.3 ? 'text-[#22c55e]' : 'text-[#64748b]'}`}>{avg}</td>
-                    <td className="py-2 px-2 text-center">{s.homeRuns > 0 ? <span className="text-[#fbbf24] font-bold">{s.homeRuns}</span> : <span className="text-[#475569]">0</span>}</td>
+                    <td className="py-2 px-2 text-center hidden sm:table-cell">{s.homeRuns > 0 ? <span className="text-[#fbbf24] font-bold">{s.homeRuns}</span> : <span className="text-[#475569]">0</span>}</td>
                     <td className="py-2 px-2 text-center">{s.rbi > 0 ? <span className="text-[#60a5fa]">{s.rbi}</span> : <span className="text-[#475569]">0</span>}</td>
-                    <td className="py-2 px-2 text-center text-[#94a3b8]">{s.runs}</td>
-                    <td className="py-2 px-2 text-center text-[#94a3b8]">{s.stolenBases || 0}</td>
-                    <td className="py-2 px-2 text-center text-[#94a3b8]">{s.doubles || 0}</td>
-                    <td className="py-2 px-2 text-center text-[#94a3b8]">{s.triples || 0}</td>
-                    <td className="py-2 px-2 text-center text-[#94a3b8]">{s.strikeouts}</td>
-                    <td className="py-2 px-2 text-center text-[#94a3b8]">{s.walks}</td>
-                    <td className="py-2 px-2 text-center text-[#94a3b8]">{s.hitByPitch || 0}</td>
-                    <td className="py-2 px-2 text-center text-[#94a3b8]">{s.sacrificeBunts || 0}</td>
-                    <td className="py-2 px-2 text-center text-[#94a3b8]">{s.sacrificeFlies || 0}</td>
+                    <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{s.runs}</td>
+                    <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{s.stolenBases || 0}</td>
+                    <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{s.doubles || 0}</td>
+                    <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{s.triples || 0}</td>
+                    <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{s.walks}</td>
+                    <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{s.hitByPitch || 0}</td>
+                    <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{s.sacrificeBunts || 0}</td>
+                    <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{s.sacrificeFlies || 0}</td>
                   </tr>
                 )
               })}
@@ -239,25 +239,26 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
             {/* チーム合計 */}
             <tfoot>
               <tr className="border-t-2 border-[#1e3a5f] text-xs font-bold">
-                <td colSpan={3} className="py-2 px-2 text-[#64748b]">チーム計</td>
-                <td className="py-2 px-2 text-center text-[#94a3b8]">{totals.pa}</td>
+                <td colSpan={2} className="py-2 px-2 text-[#64748b]">チーム計</td>
+                <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell"></td>
+                <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{totals.pa}</td>
                 <td className="py-2 px-2 text-center text-[#94a3b8]">{totals.ab}</td>
                 <td className="py-2 px-2 text-center text-[#e2e8f0]">{totals.h}</td>
                 <td className="py-2 px-2 text-center font-mono text-[#60a5fa]">{teamAvg}</td>
-                <td className="py-2 px-2 text-center text-[#fbbf24]">{totals.hr}</td>
+                <td className="py-2 px-2 text-center text-[#fbbf24] hidden sm:table-cell">{totals.hr}</td>
                 <td className="py-2 px-2 text-center text-[#60a5fa]">{totals.rbi}</td>
-                <td className="py-2 px-2 text-center">{totals.r}</td>
-                <td className="py-2 px-2 text-center">{totals.sb}</td>
-                <td className="py-2 px-2 text-center">{totals.d}</td>
-                <td className="py-2 px-2 text-center">{totals.t}</td>
-                <td className="py-2 px-2 text-center">{totals.so}</td>
-                <td className="py-2 px-2 text-center">{totals.bb}</td>
-                <td className="py-2 px-2 text-center">{totals.hbp}</td>
-                <td className="py-2 px-2 text-center">{totals.sac}</td>
-                <td className="py-2 px-2 text-center">{totals.sf}</td>
+                <td className="py-2 px-2 text-center hidden sm:table-cell">{totals.r}</td>
+                <td className="py-2 px-2 text-center hidden sm:table-cell">{totals.sb}</td>
+                <td className="py-2 px-2 text-center hidden sm:table-cell">{totals.d}</td>
+                <td className="py-2 px-2 text-center hidden sm:table-cell">{totals.t}</td>
+                <td className="py-2 px-2 text-center hidden sm:table-cell">{totals.bb}</td>
+                <td className="py-2 px-2 text-center hidden sm:table-cell">{totals.hbp}</td>
+                <td className="py-2 px-2 text-center hidden sm:table-cell">{totals.sac}</td>
+                <td className="py-2 px-2 text-center hidden sm:table-cell">{totals.sf}</td>
               </tr>
             </tfoot>
           </table>
+          </div>
         </div>
       ) : (
         <div className="glass-card rounded-2xl p-8 text-center text-[#64748b]">
@@ -267,22 +268,24 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
 
       {/* 投手成績 */}
       {game.pitchingStats.length > 0 && (
-        <div className="glass-card rounded-2xl p-4 mb-6 overflow-x-auto">
-          <h2 className="text-sm font-bold text-[#94a3b8] uppercase tracking-wider mb-3">
+        <div className="glass-card rounded-2xl p-4 mb-6">
+          <h2 className="text-sm font-bold text-[#94a3b8] uppercase tracking-wider mb-2">
             投手成績
           </h2>
-          <table className="w-full text-sm border-collapse min-w-[560px]">
+          <p className="text-[10px] text-[#475569] mb-2 sm:hidden">← 横スクロールで全成績を確認</p>
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse min-w-[300px]">
             <thead>
               <tr className="text-xs text-[#64748b] border-b border-[#1e3a5f]">
                 <th className="py-2 px-2 text-left">選手</th>
                 <th className="py-2 px-2 text-center w-12" title="勝敗セーブ">勝敗</th>
                 <th className="py-2 px-2 text-center w-16" title="投球回">投球回</th>
-                <th className="py-2 px-2 text-center w-12" title="投球数">投球数</th>
                 <th className="py-2 px-2 text-center w-12" title="失点">失点</th>
-                <th className="py-2 px-2 text-center w-12" title="自責点">自責点</th>
-                <th className="py-2 px-2 text-center w-12" title="被安打">被安打</th>
-                <th className="py-2 px-2 text-center w-12" title="奪三振">奪三振</th>
-                <th className="py-2 px-2 text-center w-12" title="与四球">与四球</th>
+                <th className="py-2 px-2 text-center w-12 hidden sm:table-cell" title="自責点">自責点</th>
+                <th className="py-2 px-2 text-center w-12 hidden sm:table-cell" title="被安打">被安打</th>
+                <th className="py-2 px-2 text-center w-12 hidden sm:table-cell" title="奪三振">奪三振</th>
+                <th className="py-2 px-2 text-center w-12 hidden sm:table-cell" title="与四球">与四球</th>
+                <th className="py-2 px-2 text-center w-12 hidden sm:table-cell" title="投球数">投球数</th>
               </tr>
             </thead>
             <tbody>
@@ -309,22 +312,37 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
                     )}
                   </td>
                   <td className="py-2 px-2 text-center font-mono text-[#94a3b8]">{p.innings}</td>
-                  <td className="py-2 px-2 text-center text-[#94a3b8]">{p.pitches || '–'}</td>
                   <td className="py-2 px-2 text-center text-[#94a3b8]">{p.runsAllowed}</td>
-                  <td className="py-2 px-2 text-center text-[#94a3b8]">{p.earnedRuns}</td>
-                  <td className="py-2 px-2 text-center text-[#94a3b8]">{p.hitsAllowed}</td>
-                  <td className="py-2 px-2 text-center text-[#94a3b8]">{p.strikeouts}</td>
-                  <td className="py-2 px-2 text-center text-[#94a3b8]">{p.walks}</td>
+                  <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{p.earnedRuns}</td>
+                  <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{p.hitsAllowed}</td>
+                  <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{p.strikeouts}</td>
+                  <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{p.walks}</td>
+                  <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{p.pitches || '–'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
       {game.note && (
-        <div className="glass-card rounded-2xl p-4 mt-4 text-sm text-[#94a3b8]">
+        <div className="glass-card rounded-2xl p-4 mb-6 text-sm text-[#94a3b8]">
           📝 {game.note}
+        </div>
+      )}
+
+      {/* スコア表写真 */}
+      {game.scorePhoto && (
+        <div className="glass-card rounded-2xl p-4 mb-6">
+          <h2 className="text-sm font-bold text-[#94a3b8] uppercase tracking-wider mb-3">
+            📷 スコア表
+          </h2>
+          <img
+            src={game.scorePhoto}
+            alt="スコア表"
+            className="w-full rounded-xl object-contain max-h-[40rem] bg-[#0d1b2a]"
+          />
         </div>
       )}
     </div>

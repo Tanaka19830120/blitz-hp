@@ -3,33 +3,22 @@
 import { useTransition, useState } from 'react'
 
 interface Props {
-  scheduleId:          string
-  sendAction:          (scheduleId: string, senderInfo: string) => Promise<void>
-  defaultSenderNumber: string
-  defaultSenderName:   string
+  scheduleId:  string
+  sendAction:  (scheduleId: string) => Promise<void>
+  senderLabel: string  // 表示用のみ（編集不可）
 }
 
-export function LineSendButton({ scheduleId, sendAction, defaultSenderNumber, defaultSenderName }: Props) {
+export function LineSendButton({ scheduleId, sendAction, senderLabel }: Props) {
   const [isPending, startTransition] = useTransition()
-  const [status,       setStatus]       = useState<'idle' | 'sent'>('idle')
-  const [senderNumber, setSenderNumber] = useState(defaultSenderNumber)
-  const [senderName,   setSenderName]   = useState(defaultSenderName)
+  const [status, setStatus] = useState<'idle' | 'sent'>('idle')
 
   function handleClick() {
-    // "#7 田中" のような文字列にまとめてサーバーに渡す
-    const senderInfo = [
-      senderNumber.trim() ? `#${senderNumber.trim()}` : '',
-      senderName.trim(),
-    ].filter(Boolean).join(' ')
-
     startTransition(async () => {
-      await sendAction(scheduleId, senderInfo)
+      await sendAction(scheduleId)
       setStatus('sent')
       setTimeout(() => setStatus('idle'), 4000)
     })
   }
-
-  const inputCls = 'bg-[#0d1b2a] border border-[#1e3a5f] rounded-lg px-2 py-1.5 text-sm text-[#e2e8f0] focus:border-[#22c55e]/60 focus:outline-none'
 
   return (
     <>
@@ -41,25 +30,13 @@ export function LineSendButton({ scheduleId, sendAction, defaultSenderNumber, de
       )}
 
       <div className="glass-card rounded-2xl p-4 space-y-3">
-        {/* 送信者入力 */}
-        <div>
-          <p className="text-xs text-[#64748b] mb-1.5">送信者（メッセージ末尾に記載）</p>
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              placeholder="#番号"
-              value={senderNumber}
-              onChange={e => setSenderNumber(e.target.value)}
-              className={`${inputCls} w-16 text-center`}
-            />
-            <input
-              type="text"
-              placeholder="名前"
-              value={senderName}
-              onChange={e => setSenderName(e.target.value)}
-              className={`${inputCls} flex-1`}
-            />
-          </div>
+        {/* 送信者表示（変更不可） */}
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-[#64748b]">📨 送信者:</span>
+          <span className="text-[#94a3b8] font-medium">
+            {senderLabel || '（未設定）'}
+          </span>
+          <span className="text-[#475569] ml-auto">ログインユーザー固定</span>
         </div>
 
         {/* 送信ボタン */}

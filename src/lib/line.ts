@@ -8,27 +8,42 @@ import { prisma } from './prisma'
 
 const LINE_PUSH_API = 'https://api.line.me/v2/bot/message/push'
 
-export async function sendToLineGroup(text: string): Promise<{ ok: boolean; error?: string }> {
+async function resolveLineCredentials(): Promise<{ token: string; groupId: string } | null> {
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN
   const groupId = process.env.LINE_GROUP_ID
     || await prisma.setting.findUnique({ where: { key: 'detectedLineGroupId' } }).then(s => s?.value ?? '').catch(() => '')
-  if (!token || !groupId) return { ok: false, error: 'LINE_CHANNEL_ACCESS_TOKEN または LINE_GROUP_ID が未設定です' }
+  if (!token || !groupId) return null
+  return { token, groupId }
+}
+
+export async function sendToLineGroup(text: string): Promise<{ ok: boolean; error?: string }> {
+  return sendTextsToLineGroup([text])
+}
+
+/** 複数テキストを1回のプッシュで送信（LINE API 上限: 5メッセージ/回） */
+export async function sendTextsToLineGroup(texts: string[]): Promise<{ ok: boolean; error?: string }> {
+  const creds = await resolveLineCredentials()
+  if (!creds) return { ok: false, error: 'LINE_CHANNEL_ACCESS_TOKEN または LINE_GROUP_ID が未設定です' }
 
   try {
-    const res = await fetch(LINE_PUSH_API, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        to: groupId,
-        messages: [{ type: 'text', text }],
-      }),
-    })
-    if (!res.ok) {
-      const body = await res.text()
-      return { ok: false, error: `LINE API ${res.status}: ${body}` }
+    // LINE API は1リクエスト最大5メッセージ → 5件ずつ送信
+    for (let i = 0; i < texts.length; i += 5) {
+      const chunk = texts.slice(i, i + 5)
+      const res = await fetch(LINE_PUSH_API, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${creds.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: creds.groupId,
+          messages: chunk.map(text => ({ type: 'text', text })),
+        }),
+      })
+      if (!res.ok) {
+        const body = await res.text()
+        return { ok: false, error: `LINE API ${res.status}: ${body}` }
+      }
     }
     return { ok: true }
   } catch (e) {
@@ -48,36 +63,72 @@ function daysUntil(date: Date) {
   return Math.ceil((new Date(date).getTime() - Date.now()) / 86400000)
 }
 
-/** 出欠リマインド */
-export function buildReminder(schedule: {
+/** 出欠リマインド（単体 or 複数試合対応） */
+export function buildReminder(schedules: {
   date: Date
   opponent: string
   location: string
   meetTime?: string | null
   startTime?: string | null
-}): string {
-  const days = daysUntil(schedule.date)
+} | {
+  date: Date
+  opponent: string
+  location: string
+  meetTime?: string | null
+  startTime?: string | null
+}[]): string {
+  const list = Array.isArray(schedules) ? schedules : [schedules]
+  const primary = list[0]
+  const days = daysUntil(primary.date)
   const when = days <= 0 ? '本日' : days === 1 ? '明日' : `${days}日後`
+
+  // 場所・集合時間を目立つブロックに（単体: 場所も含む / 複数: meetTime のみ）
+  const infoBlock: (string | null)[] = list.length === 1
+    ? [
+        `━━━━━━━━━━━━`,
+        `📍 ${primary.location}`,
+        primary.meetTime  ? `🔔 集合：${primary.meetTime}`     : null,
+        primary.startTime ? `▶ 試合開始：${primary.startTime}` : null,
+        `━━━━━━━━━━━━`,
+      ]
+    : primary.meetTime
+      ? [
+          `━━━━━━━━━━━━`,
+          `🔔 集合：${primary.meetTime}`,
+          `━━━━━━━━━━━━`,
+        ]
+      : []
+
+  const gameLines = list.length === 1
+    ? [`⚾ vs ${primary.opponent}`]
+    : list.flatMap((s, i) => [
+        `⚾ 第${i + 1}試合 vs ${s.opponent}`,
+        `📍 ${s.location}${s.startTime ? ` ▶ ${s.startTime}` : ''}`,
+      ])
 
   return [
     `📅【BLITZ】出欠登録のお願い`,
     ``,
-    `${when}（${fmt(schedule.date)}）`,
-    `⚾ vs ${schedule.opponent}`,
-    `📍 ${schedule.location}`,
-    schedule.meetTime ? `🕐 集合 ${schedule.meetTime}` : null,
-    schedule.startTime ? `▶ 試合開始 ${schedule.startTime}` : null,
+    `${when}（${fmt(primary.date)}）`,
+    ...infoBlock,
+    ``,
+    ...gameLines,
     ``,
     `出欠の登録をお願いします！`,
     `👉 https://blitz-hp.vercel.app/schedule`,
   ].filter(Boolean).join('\n')
 }
 
-/** 出欠集計 */
+/** 出欠集計（単体 or 複数試合対応） */
 export function buildAttendanceSummary(
-  schedule: { date: Date; opponent: string },
+  schedule: { date: Date; opponent: string } | { date: Date; opponent: string }[],
   attendances: { status: string; user: { name: string } }[]
 ): string {
+  // 複数試合の場合 opponent を結合
+  const primary = Array.isArray(schedule) ? schedule[0] : schedule
+  const opponentLabel = Array.isArray(schedule)
+    ? schedule.map((s, i) => `第${i + 1}試合 vs ${s.opponent}`).join(' / ')
+    : `vs ${schedule.opponent}`
   const attending = attendances.filter(a => a.status === 'ATTENDING').map(a => a.user.name)
   const absent    = attendances.filter(a => a.status === 'ABSENT').map(a => a.user.name)
   const maybe     = attendances.filter(a => a.status === 'MAYBE').map(a => a.user.name)
@@ -85,7 +136,7 @@ export function buildAttendanceSummary(
 
   return [
     `📋【BLITZ】出欠状況`,
-    `${fmt(schedule.date)} vs ${schedule.opponent}`,
+    `${fmt(primary.date)} ${opponentLabel}`,
     `━━━━━━━━━━━━`,
     `✅ 参加 ${attending.length}名`,
     attending.length > 0 ? attending.join('、') : '（なし）',
@@ -123,9 +174,10 @@ export function buildLineup(
   return [
     `📋【BLITZ】スタメン`,
     `${fmt(schedule.date)} vs ${schedule.opponent}`,
+    `━━━━━━━━━━━━`,
     `📍 ${schedule.location}`,
-    schedule.meetTime  ? `🕐 集合 ${schedule.meetTime}`   : null,
-    schedule.startTime ? `▶ 試合開始 ${schedule.startTime}` : null,
+    schedule.meetTime  ? `🔔 集合：${schedule.meetTime}`    : null,
+    schedule.startTime ? `▶ 試合開始：${schedule.startTime}` : null,
     `━━━━━━━━━━━━`,
     ...batters.map(l => {
       const pos = l.position ?? ''
@@ -166,9 +218,10 @@ export function buildLineupFromJson(
   const lines: (string | null)[] = [
     `📋【BLITZ】スタメン`,
     `${fmt(schedule.date)} vs ${schedule.opponent}`,
+    `━━━━━━━━━━━━`,
     `📍 ${schedule.location}`,
-    schedule.meetTime  ? `🕐 集合 ${schedule.meetTime}`    : null,
-    schedule.startTime ? `▶ 試合開始 ${schedule.startTime}` : null,
+    schedule.meetTime  ? `🔔 集合：${schedule.meetTime}`    : null,
+    schedule.startTime ? `▶ 試合開始：${schedule.startTime}` : null,
     `━━━━━━━━━━━━`,
   ]
 

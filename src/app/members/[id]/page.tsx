@@ -3,6 +3,8 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { MemberAvatar } from '@/components/MemberAvatar'
 
+export const dynamic = 'force-dynamic'
+
 function calcStats(gameStats: {
   atBats: number; hits: number; doubles: number; triples: number; homeRuns: number;
   rbi: number; runs: number; stolenBases: number; walks: number; strikeouts: number;
@@ -168,45 +170,46 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
       {/* Career stats */}
       {careerStats.games > 0 && (
         <div className="glass-card rounded-2xl p-5 mb-6">
-          <h2 className="text-xs font-bold text-[#64748b] tracking-wider uppercase mb-4">通算成績</h2>
+          <h2 className="text-xs font-bold text-[#64748b] tracking-wider uppercase mb-3">通算成績</h2>
+          <p className="text-[10px] text-[#475569] mb-2 sm:hidden">← 横スクロールで全成績を確認</p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-center">
               <thead>
                 <tr className="text-xs text-[#64748b] border-b border-[#1e3a5f]">
                   <th className="py-2 px-2">試合</th>
-                  <th className="py-2 px-2">打席</th>
+                  <th className="py-2 px-2 hidden sm:table-cell">打席</th>
                   <th className="py-2 px-2">打数</th>
                   <th className="py-2 px-2">安打</th>
-                  <th className="py-2 px-2">2B</th>
-                  <th className="py-2 px-2">3B</th>
-                  <th className="py-2 px-2">本</th>
+                  <th className="py-2 px-2 hidden sm:table-cell">2B</th>
+                  <th className="py-2 px-2 hidden sm:table-cell">3B</th>
+                  <th className="py-2 px-2 hidden sm:table-cell">本</th>
                   <th className="py-2 px-2">打点</th>
-                  <th className="py-2 px-2">得点</th>
-                  <th className="py-2 px-2">盗塁</th>
-                  <th className="py-2 px-2">四球</th>
-                  <th className="py-2 px-2">三振</th>
+                  <th className="py-2 px-2 hidden sm:table-cell">得点</th>
+                  <th className="py-2 px-2 hidden sm:table-cell">盗塁</th>
+                  <th className="py-2 px-2 hidden sm:table-cell">四球</th>
+                  <th className="py-2 px-2 hidden sm:table-cell">三振</th>
                   <th className="py-2 px-2 text-[#60a5fa]">打率</th>
-                  <th className="py-2 px-2">出塁率</th>
-                  <th className="py-2 px-2">長打率</th>
+                  <th className="py-2 px-2 hidden sm:table-cell">出塁率</th>
+                  <th className="py-2 px-2 hidden sm:table-cell">長打率</th>
                 </tr>
               </thead>
               <tbody>
                 <tr className="text-[#94a3b8] font-mono text-sm">
                   <td className="py-2 px-2">{careerStats.games}</td>
-                  <td className="py-2 px-2">{careerStats.pa}</td>
+                  <td className="py-2 px-2 hidden sm:table-cell">{careerStats.pa}</td>
                   <td className="py-2 px-2">{careerStats.ab}</td>
                   <td className="py-2 px-2 font-bold text-[#e2e8f0]">{careerStats.h}</td>
-                  <td className="py-2 px-2">{careerStats.d}</td>
-                  <td className="py-2 px-2">{careerStats.t}</td>
-                  <td className="py-2 px-2">{careerStats.hr > 0 ? <span className="text-[#fbbf24] font-bold">{careerStats.hr}</span> : 0}</td>
+                  <td className="py-2 px-2 hidden sm:table-cell">{careerStats.d}</td>
+                  <td className="py-2 px-2 hidden sm:table-cell">{careerStats.t}</td>
+                  <td className="py-2 px-2 hidden sm:table-cell">{careerStats.hr > 0 ? <span className="text-[#fbbf24] font-bold">{careerStats.hr}</span> : 0}</td>
                   <td className="py-2 px-2">{careerStats.rbi}</td>
-                  <td className="py-2 px-2">{careerStats.runs}</td>
-                  <td className="py-2 px-2">{careerStats.sb}</td>
-                  <td className="py-2 px-2">{careerStats.bb}</td>
-                  <td className="py-2 px-2">{careerStats.so}</td>
+                  <td className="py-2 px-2 hidden sm:table-cell">{careerStats.runs}</td>
+                  <td className="py-2 px-2 hidden sm:table-cell">{careerStats.sb}</td>
+                  <td className="py-2 px-2 hidden sm:table-cell">{careerStats.bb}</td>
+                  <td className="py-2 px-2 hidden sm:table-cell">{careerStats.so}</td>
                   <td className="py-2 px-2 font-black text-[#60a5fa]">{careerStats.avg}</td>
-                  <td className="py-2 px-2">{careerStats.obp}</td>
-                  <td className="py-2 px-2">{careerStats.slg}</td>
+                  <td className="py-2 px-2 hidden sm:table-cell">{careerStats.obp}</td>
+                  <td className="py-2 px-2 hidden sm:table-cell">{careerStats.slg}</td>
                 </tr>
               </tbody>
             </table>
@@ -263,19 +266,20 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
       {/* Recent game log */}
       {player.gameStats.length > 0 && (
         <div className="glass-card rounded-2xl p-5">
-          <h2 className="text-xs font-bold text-[#64748b] tracking-wider uppercase mb-4">直近の試合成績</h2>
+          <h2 className="text-xs font-bold text-[#64748b] tracking-wider uppercase mb-3">直近の試合成績</h2>
+          <p className="text-[10px] text-[#475569] mb-2 sm:hidden">← 横スクロールで全成績を確認</p>
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-center">
               <thead>
                 <tr className="text-[#64748b] border-b border-[#1e3a5f]">
                   <th className="py-2 px-2 text-left">日付</th>
                   <th className="py-2 px-2 text-left">対戦相手</th>
-                  <th className="py-2 px-2">守備</th>
-                  <th className="py-2 px-2">打順</th>
+                  <th className="py-2 px-2 hidden sm:table-cell">守備</th>
+                  <th className="py-2 px-2 hidden sm:table-cell">打順</th>
                   <th className="py-2 px-2">打数</th>
                   <th className="py-2 px-2">安打</th>
                   <th className="py-2 px-2">打点</th>
-                  <th className="py-2 px-2">得点</th>
+                  <th className="py-2 px-2 hidden sm:table-cell">得点</th>
                   <th className="py-2 px-2">打率</th>
                 </tr>
               </thead>
@@ -294,12 +298,12 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
                           vs {gs.game.schedule.opponent}
                         </Link>
                       </td>
-                      <td className="py-2 px-2 text-[#64748b]">{gs.position ?? '–'}</td>
-                      <td className="py-2 px-2 text-[#64748b]">{gs.battingOrder ?? '–'}</td>
+                      <td className="py-2 px-2 text-[#64748b] hidden sm:table-cell">{gs.position ?? '–'}</td>
+                      <td className="py-2 px-2 text-[#64748b] hidden sm:table-cell">{gs.battingOrder ?? '–'}</td>
                       <td className="py-2 px-2 text-[#94a3b8]">{gs.atBats}</td>
                       <td className="py-2 px-2 font-bold text-[#e2e8f0]">{gs.hits}</td>
                       <td className="py-2 px-2 text-[#94a3b8]">{gs.rbi}</td>
-                      <td className="py-2 px-2 text-[#94a3b8]">{gs.runs}</td>
+                      <td className="py-2 px-2 text-[#94a3b8] hidden sm:table-cell">{gs.runs}</td>
                       <td className={`py-2 px-2 font-mono ${
                         gs.atBats > 0 && gs.hits / gs.atBats >= 0.3 ? 'text-[#22c55e]' : 'text-[#64748b]'
                       }`}>{avg}</td>

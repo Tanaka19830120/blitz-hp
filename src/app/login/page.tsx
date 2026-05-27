@@ -16,14 +16,14 @@ export default function LoginPage() {
 
     const form = new FormData(e.currentTarget)
     const result = await signIn('credentials', {
-      email: form.get('email'),
+      number: form.get('number'),
       password: form.get('password'),
       redirect: false,
     })
 
     setLoading(false)
     if (result?.error) {
-      setError('メールアドレスまたはパスワードが正しくありません')
+      setError('背番号またはパスワードが正しくありません')
     } else {
       router.push('/')
       router.refresh()
@@ -42,13 +42,14 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="flex flex-col gap-5">
             <div>
               <label className="block text-sm font-medium text-[#94a3b8] mb-2">
-                メールアドレス
+                背番号
               </label>
               <input
-                name="email"
-                type="email"
+                name="number"
+                type="text"
+                inputMode="numeric"
                 required
-                placeholder="example@email.com"
+                placeholder="28"
               />
             </div>
 

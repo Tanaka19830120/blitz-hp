@@ -2,15 +2,46 @@ import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { sendToLineGroup, buildReminder, buildAttendanceSummary } from '@/lib/line'
+import { auth } from '@/auth'
 
 // ─── Server Actions ──────────────────────────
+
+/** ログインユーザーの送信者フッターを生成 */
+async function getSenderFooter(): Promise<string> {
+  const session = await auth()
+  if (!session?.user?.id) return ''
+  const me = await prisma.user.findUnique({
+    where:  { id: session.user.id },
+    select: { name: true, number: true },
+  })
+  if (!me) return ''
+  const info = [
+    me.number != null ? `#${me.number}` : '',
+    me.name ?? '',
+  ].filter(Boolean).join(' ')
+  return info ? `\n━━━━━━━━━━━━\n📨 送信者: ${info}` : ''
+}
+
+/** scheduleId からグループ全体のスケジュールを取得 */
+async function getGroupSchedules(scheduleId: string) {
+  const s = await prisma.schedule.findUnique({ where: { id: scheduleId } })
+  if (!s) return []
+  if (!s.dayGroupId) return [s]
+  return prisma.schedule.findMany({
+    where:   { dayGroupId: s.dayGroupId },
+    orderBy: { date: 'asc' },
+  })
+}
 
 async function sendLineReminder(formData: FormData) {
   'use server'
   const scheduleId = String(formData.get('scheduleId'))
-  const schedule = await prisma.schedule.findUnique({ where: { id: scheduleId } })
-  if (!schedule) return
-  const msg = buildReminder(schedule)
+  const [group, senderFooter] = await Promise.all([
+    getGroupSchedules(scheduleId),
+    getSenderFooter(),
+  ])
+  if (!group.length) return
+  const msg = buildReminder(group.length === 1 ? group[0] : group) + senderFooter
   await sendToLineGroup(msg)
   revalidatePath('/admin')
 }
@@ -18,14 +49,21 @@ async function sendLineReminder(formData: FormData) {
 async function sendLineAttendance(formData: FormData) {
   'use server'
   const scheduleId = String(formData.get('scheduleId'))
-  const schedule = await prisma.schedule.findUnique({
-    where: { id: scheduleId },
-    include: {
-      attendances: { include: { user: { select: { name: true } } } },
-    },
+  const [group, senderFooter] = await Promise.all([
+    getGroupSchedules(scheduleId),
+    getSenderFooter(),
+  ])
+  if (!group.length) return
+
+  // 出欠は primary (group[0]) のものを使用（グループ内は共通）
+  const primary = await prisma.schedule.findUnique({
+    where:   { id: group[0].id },
+    include: { attendances: { include: { user: { select: { name: true } } } } },
   })
-  if (!schedule) return
-  const msg = buildAttendanceSummary(schedule, schedule.attendances)
+  if (!primary) return
+
+  const scheduleArg = group.length === 1 ? group[0] : group
+  const msg = buildAttendanceSummary(scheduleArg, primary.attendances) + senderFooter
   await sendToLineGroup(msg)
   revalidatePath('/admin')
 }
@@ -42,15 +80,30 @@ export default async function AdminPage() {
     prisma.game.count(),
   ])
 
-  const recentSchedules = await prisma.schedule.findMany({
-    where: { date: { gte: new Date() } },
+  const upcomingAll = await prisma.schedule.findMany({
+    where:   { date: { gte: new Date() } },
     orderBy: { date: 'asc' },
-    take: 8,
+    take:    20,
     include: {
       _count: { select: { attendances: true } },
-      game: { select: { id: true } },
+      game:   { select: { id: true } },
     },
   })
+
+  // dayGroupId でグループ化（同日複数試合を1行に）
+  type ScheduleItem = typeof upcomingAll[number]
+  const groups: ScheduleItem[][] = []
+  const seenGroup = new Set<string>()
+  for (const s of upcomingAll) {
+    if (s.dayGroupId) {
+      if (seenGroup.has(s.dayGroupId)) continue
+      seenGroup.add(s.dayGroupId)
+      groups.push(upcomingAll.filter(x => x.dayGroupId === s.dayGroupId))
+    } else {
+      groups.push([s])
+    }
+  }
+  const recentSchedules = groups.slice(0, 8)
 
   return (
     <div className="pt-16 max-w-7xl mx-auto px-4 py-12">
@@ -157,53 +210,85 @@ export default async function AdminPage() {
           )}
 
           <div className="flex flex-col gap-3">
-            {recentSchedules.map((s) => (
-              <div key={s.id} className="glass-card rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <div className="font-medium text-[#e2e8f0]">vs {s.opponent}</div>
-                  <div className="text-xs text-[#64748b]">
-                    {new Date(s.date).toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })}
-                    {' '}— {s.location}
+            {recentSchedules.map((group) => {
+              const primary = group[0]
+              const isMulti = group.length > 1
+              const totalAttendances = group.reduce((sum, s) => sum + s._count.attendances, 0)
+              // 複数試合の場合、参加者数は最大値を表示（同一ユーザーが全試合に回答するため）
+              const attendanceDisplay = isMulti
+                ? Math.max(...group.map(s => s._count.attendances))
+                : primary._count.attendances
+              const hasGame = group.some(s => s.game?.id)
+
+              const opponentLabel = isMulti
+                ? group.map((s, i) => `第${i + 1}試合 vs ${s.opponent}`).join(' / ')
+                : `vs ${primary.opponent}`
+
+              return (
+                <div key={primary.id} className="glass-card rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="font-medium text-[#e2e8f0]">
+                      {opponentLabel}
+                      {isMulti && (
+                        <span className="ml-2 text-xs px-1.5 py-0.5 rounded border text-[#22d3ee] border-[#0e7490]/40 bg-[#0e7490]/10">
+                          🔗 {group.length}試合
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-[#64748b]">
+                      {new Date(primary.date).toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })}
+                      {!isMulti && ` — ${primary.location}`}
+                    </div>
+                    <div className="text-xs text-[#475569] mt-0.5">参加回答 {attendanceDisplay}名</div>
                   </div>
-                  <div className="text-xs text-[#475569] mt-0.5">参加回答 {s._count.attendances}名</div>
-                </div>
 
-                <div className="flex flex-wrap items-center gap-2 shrink-0">
-                  {/* 結果入力 or 登録済み */}
-                  {!s.game ? (
-                    <Link href={`/admin/game?scheduleId=${s.id}`} className="text-xs btn-primary py-1 px-3">
-                      結果入力
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    {/* 日程編集 */}
+                    <Link
+                      href={`/admin/schedule?edit=${primary.id}`}
+                      className="text-xs px-3 py-1 rounded-lg border border-[#475569]/50 text-[#94a3b8] hover:border-[#94a3b8]/60 hover:text-[#e2e8f0] transition-all"
+                    >
+                      ✏️ 編集
                     </Link>
-                  ) : (
-                    <span className="text-xs text-[#22c55e]">✓ 登録済</span>
-                  )}
 
-                  {/* LINE送信ボタン */}
-                  {lineConfigured && (
-                    <>
-                      <form action={sendLineReminder}>
-                        <input type="hidden" name="scheduleId" value={s.id} />
-                        <button
-                          type="submit"
-                          className="text-xs px-3 py-1 rounded-lg border border-[#22c55e]/40 text-[#22c55e] hover:bg-[#22c55e]/10 transition-all"
-                        >
-                          📣 出欠リマインド
-                        </button>
-                      </form>
-                      <form action={sendLineAttendance}>
-                        <input type="hidden" name="scheduleId" value={s.id} />
-                        <button
-                          type="submit"
-                          className="text-xs px-3 py-1 rounded-lg border border-[#60a5fa]/40 text-[#60a5fa] hover:bg-[#60a5fa]/10 transition-all"
-                        >
-                          📋 出欠表送信
-                        </button>
-                      </form>
-                    </>
-                  )}
+                    {/* 結果入力 */}
+                    {!hasGame ? (
+                      <Link href={`/admin/game?scheduleId=${primary.id}`} className="text-xs btn-primary py-1 px-3">
+                        結果入力
+                      </Link>
+                    ) : (
+                      <Link href={`/admin/game?scheduleId=${primary.id}`} className="text-xs text-[#22c55e] hover:text-[#4ade80] transition-colors">
+                        ✓ 登録済
+                      </Link>
+                    )}
+
+                    {/* LINE送信ボタン */}
+                    {lineConfigured && (
+                      <>
+                        <form action={sendLineReminder}>
+                          <input type="hidden" name="scheduleId" value={primary.id} />
+                          <button
+                            type="submit"
+                            className="text-xs px-3 py-1 rounded-lg border border-[#22c55e]/40 text-[#22c55e] hover:bg-[#22c55e]/10 transition-all"
+                          >
+                            📣 出欠リマインド
+                          </button>
+                        </form>
+                        <form action={sendLineAttendance}>
+                          <input type="hidden" name="scheduleId" value={primary.id} />
+                          <button
+                            type="submit"
+                            className="text-xs px-3 py-1 rounded-lg border border-[#60a5fa]/40 text-[#60a5fa] hover:bg-[#60a5fa]/10 transition-all"
+                          >
+                            📋 出欠表送信
+                          </button>
+                        </form>
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}

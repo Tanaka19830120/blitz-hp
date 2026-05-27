@@ -1,0 +1,117 @@
+/**
+ * Scorebook notation library.
+ *
+ * Code format: <result>[<rbi>][s]
+ *   O  = アウト（三振/ゴロ/フライ統合）
+ *   1  = 単打   2  = 二塁打  3  = 三塁打  4  = 本塁打
+ *   B  = 四球   D  = 死球   S  = 犠打    X  = 犠飛
+ *   K/G/F = 旧コード（後方互換・引き続き解析可能）
+ *   Digit suffix = 打点 (e.g. "12" = 単打2打点)
+ *   "s" suffix   = 盗塁  (e.g. "1s" = 単打盗塁, "12s" = 単打2打点盗塁)
+ *   HR with no digit defaults to 1 RBI (e.g. "4" = solo HR)
+ *
+ *   Multi-AB per inning: comma-separated codes in one cell (e.g. "1,O")
+ */
+
+export interface BatterSlot {
+  order:  number
+  userId: string
+  cells:  Record<number, string>  // 1-indexed inning → code string (comma-separated for 2+ ABs)
+}
+
+export interface PitcherSlot {
+  userId:       string
+  innings:      string   // e.g. "5" | "5.1" | "5.2"
+  runs:         number   // 失点
+  earnedRuns?:  number   // 自責点
+  hitsAllowed?: number   // 被安打
+  strikeouts?:  number   // 奪三振
+  walks?:       number   // 与四球
+  pitches?:     number   // 投球数
+  decision:     string   // '' | '勝' | '負' | 'S' | 'H'
+}
+
+export interface ScoreBookData {
+  innings:        number
+  batters:        BatterSlot[]
+  pitchers:       PitcherSlot[]
+  ourScore?:      number | null
+  opponentScore?: number | null
+  note?:          string
+}
+
+export interface BatterStats {
+  pa:        number
+  ab:        number
+  h:         number
+  doubles:   number
+  triples:   number
+  homeRuns:  number
+  rbi:       number
+  sb:        number
+  bb:        number
+  hbp:       number
+  sac:       number
+  sf:        number
+  k:         number
+}
+
+export const ZERO_STATS: BatterStats = {
+  pa: 0, ab: 0, h: 0, doubles: 0, triples: 0, homeRuns: 0,
+  rbi: 0, sb: 0, bb: 0, hbp: 0, sac: 0, sf: 0, k: 0,
+}
+
+/** Parse a single at-bat code into a stats delta. Returns null for empty/invalid input. */
+export function parseCode(raw: string): BatterStats | null {
+  const code = raw.trim()
+  if (!code) return null
+  // O/o = generic out (アウト); K/G/F kept for backward compat
+  const m = code.match(/^([KGFkgfOo1234BDSXbdsx])([0-9])?(s|S)?$/)
+  if (!m) return null
+
+  const r   = m[1].toUpperCase()
+  const rbi = m[2] !== undefined ? parseInt(m[2]) : (r === '4' ? 1 : 0)
+  const sb  = m[3] ? 1 : 0
+
+  return {
+    pa:       1,
+    ab:       'KGFO1234'.includes(r) ? 1 : 0,  // O はアウト扱い（打数カウント）
+    h:        '1234'.includes(r)    ? 1 : 0,
+    doubles:  r === '2' ? 1 : 0,
+    triples:  r === '3' ? 1 : 0,
+    homeRuns: r === '4' ? 1 : 0,
+    rbi,
+    sb,
+    bb:  r === 'B' ? 1 : 0,
+    hbp: r === 'D' ? 1 : 0,
+    sac: r === 'S' ? 1 : 0,
+    sf:  r === 'X' ? 1 : 0,
+    k:   r === 'K' ? 1 : 0,  // 旧K コードのみ三振カウント（後方互換）
+  }
+}
+
+/** Aggregate all cells for one batter into total stats. */
+export function calcBatterStats(cells: Record<number, string>): BatterStats {
+  const stats = { ...ZERO_STATS }
+  for (const raw of Object.values(cells)) {
+    // comma-separated: support multiple ABs per inning (e.g. "1,O")
+    for (const part of raw.split(',')) {
+      const s = parseCode(part.trim())
+      if (!s) continue
+      for (const key of Object.keys(ZERO_STATS) as (keyof BatterStats)[]) {
+        stats[key] += s[key]
+      }
+    }
+  }
+  return stats
+}
+
+/** Return a Tailwind text color class for a given cell code (for live coloring). */
+export function cellColor(code: string): string {
+  const c = code.trim().toUpperCase()[0]
+  if (!c) return ''
+  if ('1234'.includes(c)) return 'text-[#22c55e]'     // green: hits
+  if (c === 'B' || c === 'D') return 'text-[#60a5fa]'  // blue: walk/HBP
+  if (c === 'S' || c === 'X') return 'text-[#fbbf24]'  // amber: sacrifice
+  return 'text-[#94a3b8]'                               // gray: O, K, G, F (outs)
+}

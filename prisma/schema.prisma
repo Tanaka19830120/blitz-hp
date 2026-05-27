@@ -51,16 +51,17 @@ model User {
 }
 
 model Schedule {
-  id        String   @id @default(cuid())
-  date      DateTime
-  opponent  String
-  location  String
-  type      GameType @default(REGULAR)
-  meetTime  String?
-  startTime String?
-  note      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(cuid())
+  date       DateTime
+  opponent   String
+  location   String
+  type       GameType @default(REGULAR)
+  meetTime   String?
+  startTime  String?
+  note       String?
+  dayGroupId String?  // 同日複数試合グループ識別子（同値のScheduleを1枚のカードで表示）
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   attendances Attendance[]
   game        Game?
@@ -88,6 +89,8 @@ model Game {
   result        GameResult
   note          String?
   inningScores  String?    // JSON: {"blitz":[0,1,2],"opponent":[1,0,0]}
+  scorebook     String?    // JSON: ScoreBookData (per-inning per-batter results)
+  scorePhoto    String?    // URL: スコア表写真（Vercel Blob）
   teamsOneId    String?    @unique
   createdAt     DateTime   @default(now())
   scheduleId    String     @unique

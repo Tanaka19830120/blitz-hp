@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
+      // Vercel Blob Storage
+      { protocol: 'https', hostname: '*.public.blob.vercel-storage.com' },
       // teams.one CDN
       { protocol: 'https', hostname: 'd2evtrak3oey66.cloudfront.net' },
       // Google user content (Google Photos direct share links)

@@ -117,50 +117,64 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
 
   // ─── 前半選手変更（打順内でスワップ） ─────────────────────────
   function changeFirst(idx: number, newId: string) {
-    const next = slots.map(s => ({ first: { ...s.first }, second: { ...s.second } }))
-    const displaced = next[idx].first.playerId
-    const ci = next.findIndex((s, i) => i !== idx && s.first.playerId === newId)
-    if (ci !== -1) next[ci].first.playerId = displaced
-    // 後半欄に同じ選手がいればクリア
-    next.forEach((s, i) => { if (i !== idx && s.second.playerId === newId) s.second.playerId = '' })
+    const next  = slots.map(s => ({ first: { ...s.first }, second: { ...s.second } }))
+    const nextFp = fpSlots.map(f => ({ ...f }))
+    if (newId) {
+      // newId が空のときはスワップ不要（空スロットを誤って動かさないため）
+      const displaced = next[idx].first.playerId
+      const ci = next.findIndex((s, i) => i !== idx && s.first.playerId === newId)
+      if (ci !== -1) next[ci].first.playerId = displaced
+      // 後半欄・FPに同じ選手がいればクリア
+      next.forEach((s, i) => { if (i !== idx && s.second.playerId === newId) s.second.playerId = '' })
+      const fpIdx = nextFp.findIndex(f => f.playerId === newId)
+      if (fpIdx !== -1) nextFp[fpIdx].playerId = ''
+      setBench(prev => prev.filter(id => id !== newId))
+    }
     next[idx].first.playerId = newId
-    const nextFp = fpSlots.map(f => f.playerId === newId ? { ...f, playerId: '' } : { ...f })
-    // ベンチからも除去
-    setBench(prev => prev.filter(id => id !== newId))
     setSlots(next); setFpSlots(nextFp)
   }
 
   // ─── 後半選手変更 ────────────────────────────────────────────
   function changeSecond(idx: number, newId: string) {
-    const next = slots.map(s => ({ first: { ...s.first }, second: { ...s.second } }))
-    const displaced = next[idx].second.playerId
-    const ci = next.findIndex((s, i) => i !== idx && s.second.playerId === newId)
-    if (ci !== -1) next[ci].second.playerId = displaced
-    next.forEach((s, i) => { if (i !== idx && s.first.playerId === newId) s.first.playerId = '' })
+    const next  = slots.map(s => ({ first: { ...s.first }, second: { ...s.second } }))
+    const nextFp = fpSlots.map(f => ({ ...f }))
+    if (newId) {
+      // newId が空（「─ 同じ ─」）のときはスワップ不要
+      const displaced = next[idx].second.playerId
+      const ci = next.findIndex((s, i) => i !== idx && s.second.playerId === newId)
+      if (ci !== -1) next[ci].second.playerId = displaced
+      // 前半・FPに同じ選手がいればクリア
+      next.forEach((s, i) => { if (i !== idx && s.first.playerId === newId) s.first.playerId = '' })
+      const fpIdx = nextFp.findIndex(f => f.playerId === newId)
+      if (fpIdx !== -1) nextFp[fpIdx].playerId = ''
+      setBench(prev => prev.filter(id => id !== newId))
+    }
     next[idx].second.playerId = newId
-    const nextFp = fpSlots.map(f => f.playerId === newId ? { ...f, playerId: '' } : { ...f })
-    setBench(prev => prev.filter(id => id !== newId))
     setSlots(next); setFpSlots(nextFp)
   }
 
-  // ─── ポジション更新（競合があれば旧ポジションと入れ替え） ───────
+  // ─── ポジション更新 ────────────────────────────────────────────
+  // 前半と後半は独立したハーフ。前半ポジションを変えても後半には干渉しない（逆も同様）。
+  // 同じハーフ内で重複があれば旧ポジションと自動入れ替え。
+  //
+  // 後半ポジションの「実効値」:
+  //   second.position が設定されていれば それを使用
+  //   second.position が空 かつ second.playerId が空（= 前半と同じ選手）なら first.position を使用
+  //   → これにより「前半と同じ選手のまま後半だけポジション変更」も正しくスワップ検出できる
+
   function updateFirstPos(idx: number, pos: string) {
     const oldPos = slots[idx].first.position
     if (oldPos === pos) return
     const ns = slots.map(s => ({ first: { ...s.first }, second: { ...s.second } }))
     const nf = fpSlots.map(f => ({ ...f }))
     if (pos && pos !== 'DP') {
-      // 前半スロットに同じPOSがあれば入れ替え
+      // 前半スロット内のみ重複チェック（後半には一切干渉しない）
       for (let i = 0; i < ns.length; i++) {
-        if (i !== idx && ns[i].first.position === pos) ns[i].first.position = oldPos
+        if (i !== idx && ns[i].first.position === pos) { ns[i].first.position = oldPos; break }
       }
-      // 後半スロットに同じPOSがあれば入れ替え
-      for (let i = 0; i < ns.length; i++) {
-        if (i !== idx && ns[i].second.playerId && ns[i].second.position === pos) ns[i].second.position = oldPos
-      }
-      // FPスロットに同じPOSがあれば入れ替え
+      // FPスロットとの重複チェック
       for (let i = 0; i < nf.length; i++) {
-        if (nf[i].position === pos) nf[i].position = oldPos
+        if (nf[i].position === pos) { nf[i].position = oldPos; break }
       }
     }
     ns[idx].first.position = pos
@@ -172,15 +186,28 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
     if (oldPos === pos) return
     const ns = slots.map(s => ({ first: { ...s.first }, second: { ...s.second } }))
     const nf = fpSlots.map(f => ({ ...f }))
+
+    // idx の後半の実効ポジション（変更前）
+    const idxEffective = oldPos !== ''
+      ? oldPos
+      : (ns[idx].second.playerId === '' ? ns[idx].first.position : '')
+
     if (pos && pos !== 'DP') {
+      // 後半スロット内の重複チェック
+      // second.playerId="" (前半と同じ選手) の行も含め、実効ポジションで比較
       for (let i = 0; i < ns.length; i++) {
-        if (i !== idx && ns[i].first.position === pos) ns[i].first.position = oldPos
+        if (i === idx) continue
+        const effPos = ns[i].second.position !== ''
+          ? ns[i].second.position
+          : (ns[i].second.playerId === '' ? ns[i].first.position : '')
+        if (effPos === pos) {
+          ns[i].second.position = idxEffective
+          break  // 最初の重複のみスワップ
+        }
       }
-      for (let i = 0; i < ns.length; i++) {
-        if (i !== idx && ns[i].second.playerId && ns[i].second.position === pos) ns[i].second.position = oldPos
-      }
+      // FPスロットとの重複チェック
       for (let i = 0; i < nf.length; i++) {
-        if (nf[i].position === pos) nf[i].position = oldPos
+        if (nf[i].position === pos) { nf[i].position = idxEffective; break }
       }
     }
     ns[idx].second.position = pos

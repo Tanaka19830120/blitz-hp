@@ -3,17 +3,25 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import bcrypt from 'bcryptjs'
 import Link from 'next/link'
+import { PhotoUploader } from '@/components/PhotoUploader'
 
 async function createMember(formData: FormData) {
   'use server'
-  const password = await bcrypt.hash(String(formData.get('password')), 10)
+  const name    = String(formData.get('name'))
+  const numberRaw = formData.get('number')
+  const number  = numberRaw && String(numberRaw).trim() !== '' ? parseInt(String(numberRaw)) : null
+  // ログインID: 背番号があればそのまま文字列、なければ名前からフォールバック
+  const loginId = number != null ? String(number) : name.toLowerCase().replace(/\s+/g, '')
+  const email   = `${loginId}@b`
+  const password = await bcrypt.hash(`${loginId}${loginId}`, 10)
+
   await prisma.user.create({
     data: {
-      name: String(formData.get('name')),
-      email: String(formData.get('email')),
+      name,
+      email,
       password,
       role: String(formData.get('role')) as 'ADMIN' | 'PLAYER',
-      number: parseInt(String(formData.get('number') || '')) || null,
+      number,
       position: String(formData.get('position') || '') || null,
       photoUrl: String(formData.get('photoUrl') || '') || null,
     },
@@ -23,22 +31,55 @@ async function createMember(formData: FormData) {
   redirect('/admin/members')
 }
 
+async function toggleRole(formData: FormData) {
+  'use server'
+  const id      = String(formData.get('id'))
+  const current = String(formData.get('current'))
+  const next    = current === 'ADMIN' ? 'PLAYER' : 'ADMIN'
+  await prisma.user.update({ where: { id }, data: { role: next } })
+  revalidatePath('/admin/members')
+}
+
 async function updateMember(formData: FormData) {
   'use server'
-  const id = String(formData.get('id'))
+  const id        = String(formData.get('id'))
   const numberRaw = formData.get('number')
+  const number    = numberRaw && String(numberRaw).trim() !== '' ? parseInt(String(numberRaw)) : null
+  const name      = String(formData.get('name'))
+
+  // 背番号が変わった場合はログインID（email）とパスワードも更新
+  const existing = await prisma.user.findUnique({ where: { id }, select: { number: true } })
+  const numberChanged = number !== existing?.number
+
+  const loginId  = number != null ? String(number) : name.toLowerCase().replace(/\s+/g, '')
+  const newEmail = `${loginId}@b`
+  const newPwHash = numberChanged ? await bcrypt.hash(`${loginId}${loginId}`, 10) : undefined
+
   await prisma.user.update({
     where: { id },
     data: {
-      name: String(formData.get('name')),
-      role: String(formData.get('role')) as 'ADMIN' | 'PLAYER',
-      number: numberRaw && String(numberRaw).trim() !== '' ? parseInt(String(numberRaw)) : null,
+      name,
+      role:     String(formData.get('role')) as 'ADMIN' | 'PLAYER',
+      number,
       position: String(formData.get('position') || '') || null,
       photoUrl: String(formData.get('photoUrl') || '') || null,
+      ...(numberChanged ? { email: newEmail, password: newPwHash } : {}),
     },
   })
   revalidatePath('/members')
+  revalidatePath(`/members/${id}`)
   revalidatePath('/stats')
+}
+
+async function resetPassword(formData: FormData) {
+  'use server'
+  const id = String(formData.get('id'))
+  const user = await prisma.user.findUnique({ where: { id }, select: { email: true } })
+  if (!user) return
+  const loginId = user.email.replace(/@b$/, '')
+  const hash = await bcrypt.hash(`${loginId}${loginId}`, 10)
+  await prisma.user.update({ where: { id }, data: { password: hash } })
+  revalidatePath('/admin/members')
 }
 
 async function deleteMember(formData: FormData) {
@@ -75,6 +116,26 @@ export default async function AdminMembersPage({
       {editMember ? (
         <div className="glass-card rounded-2xl p-6 mb-8 border border-[#2563eb]/30">
           <h2 className="text-sm font-bold text-[#60a5fa] mb-4">✏️ {editMember.name} を編集</h2>
+
+          {/* 現在のログイン情報 */}
+          {(() => {
+            const loginId = editMember.email.replace(/@b$/, '')
+            return (
+              <div className="flex items-center justify-between mb-4 px-3 py-2 rounded-lg bg-[#0f172a] border border-[#1e3a5f] text-xs">
+                <span className="text-[#64748b]">
+                  現在のログイン: <span className="text-[#e2e8f0] font-mono">{loginId}</span>
+                  　PW: <span className="text-[#e2e8f0] font-mono">{loginId}{loginId}</span>
+                </span>
+                <form action={resetPassword}>
+                  <input type="hidden" name="id" value={editMember.id} />
+                  <button type="submit" className="text-[#fbbf24] hover:text-[#fbbf24]/80 ml-3">
+                    PW リセット
+                  </button>
+                </form>
+              </div>
+            )
+          })()}
+
           <form action={updateMember} className="grid gap-3 sm:grid-cols-2">
             <input type="hidden" name="id" value={editMember.id} />
             <div>
@@ -89,7 +150,7 @@ export default async function AdminMembersPage({
               </select>
             </div>
             <div>
-              <label className="block text-xs text-[#64748b] mb-1.5">背番号</label>
+              <label className="block text-xs text-[#64748b] mb-1.5">背番号 <span className="text-[#475569]">（変更でログインIDも更新）</span></label>
               <input type="number" name="number" defaultValue={editMember.number ?? ''} placeholder="例: 7" min="0" max="99" />
             </div>
             <div>
@@ -97,14 +158,8 @@ export default async function AdminMembersPage({
               <input type="text" name="position" defaultValue={editMember.position ?? ''} placeholder="例: ショート" />
             </div>
             <div className="sm:col-span-2">
-              <label className="block text-xs text-[#64748b] mb-1.5">写真URL（任意）</label>
-              <input
-                type="url"
-                name="photoUrl"
-                defaultValue={editMember.photoUrl ?? ''}
-                placeholder="https://example.com/photo.jpg"
-              />
-              <p className="text-[10px] text-[#475569] mt-1">Twitter/X・Imgur・Googleフォトなど直リンクできる画像URL。teams.oneは非対応。</p>
+              <label className="block text-xs text-[#64748b] mb-1.5">写真</label>
+              <PhotoUploader defaultUrl={editMember.photoUrl ?? ''} />
             </div>
             <div className="sm:col-span-2 flex gap-3">
               <button type="submit" className="btn-primary flex-1 py-2.5">保存する</button>
@@ -115,26 +170,12 @@ export default async function AdminMembersPage({
       ) : (
         /* Add form */
         <div className="glass-card rounded-2xl p-6 mb-8">
-          <h2 className="text-sm font-bold text-[#94a3b8] mb-4">メンバーを追加</h2>
+          <h2 className="text-sm font-bold text-[#94a3b8] mb-1">メンバーを追加</h2>
+          <p className="text-[11px] text-[#475569] mb-4">ログインID＝背番号、パスワード＝背番号×2（例: 28 / 2828）で自動設定されます。</p>
           <form action={createMember} className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className="block text-xs text-[#64748b] mb-1.5">名前 *</label>
               <input type="text" name="name" required placeholder="山田 太郎" />
-            </div>
-            <div>
-              <label className="block text-xs text-[#64748b] mb-1.5">メールアドレス *</label>
-              <input type="email" name="email" required placeholder="yamada@example.com" />
-            </div>
-            <div>
-              <label className="block text-xs text-[#64748b] mb-1.5">パスワード *</label>
-              <input type="password" name="password" required placeholder="6文字以上" minLength={6} />
-            </div>
-            <div>
-              <label className="block text-xs text-[#64748b] mb-1.5">権限</label>
-              <select name="role">
-                <option value="PLAYER">選手</option>
-                <option value="ADMIN">管理者</option>
-              </select>
             </div>
             <div>
               <label className="block text-xs text-[#64748b] mb-1.5">背番号</label>
@@ -144,10 +185,16 @@ export default async function AdminMembersPage({
               <label className="block text-xs text-[#64748b] mb-1.5">ポジション</label>
               <input type="text" name="position" placeholder="例: ショート" />
             </div>
+            <div>
+              <label className="block text-xs text-[#64748b] mb-1.5">権限</label>
+              <select name="role">
+                <option value="PLAYER">選手</option>
+                <option value="ADMIN">管理者</option>
+              </select>
+            </div>
             <div className="sm:col-span-2">
-              <label className="block text-xs text-[#64748b] mb-1.5">写真URL（任意）</label>
-              <input type="url" name="photoUrl" placeholder="https://example.com/photo.jpg" />
-              <p className="text-[10px] text-[#475569] mt-1">Twitter/X・Imgur・Googleフォトなど直リンクできる画像URL。teams.oneは非対応。</p>
+              <label className="block text-xs text-[#64748b] mb-1.5">写真</label>
+              <PhotoUploader />
             </div>
             <div className="sm:col-span-2">
               <button type="submit" className="btn-primary w-full py-2.5">追加する</button>
@@ -192,6 +239,22 @@ export default async function AdminMembersPage({
               )}
             </div>
             <div className="flex items-center gap-3 shrink-0">
+              {/* 管理者トグル */}
+              <form action={toggleRole}>
+                <input type="hidden" name="id" value={m.id} />
+                <input type="hidden" name="current" value={m.role} />
+                <button
+                  type="submit"
+                  title={m.role === 'ADMIN' ? '選手に戻す' : '管理者にする'}
+                  className={`text-xs px-2 py-0.5 rounded border transition-colors ${
+                    m.role === 'ADMIN'
+                      ? 'border-[#fbbf24]/40 text-[#fbbf24] hover:bg-[#fbbf24]/10'
+                      : 'border-[#475569] text-[#475569] hover:border-[#fbbf24]/40 hover:text-[#fbbf24]'
+                  }`}
+                >
+                  {m.role === 'ADMIN' ? '★管理者' : '☆選手'}
+                </button>
+              </form>
               <Link
                 href={`/admin/members?edit=${m.id}`}
                 className="text-xs text-[#60a5fa]/70 hover:text-[#60a5fa] transition-colors"

@@ -34,6 +34,19 @@ async function main() {
   // v3: Add EVENT to GameType (no-op for SQLite, already TEXT)
   // GameType is stored as TEXT in SQLite, no migration needed
 
+  // v5: Scorebook JSON on Game
+  await safeAddColumn('Game', 'scorebook', 'TEXT')
+
+  // v6: Multi-game day grouping on Schedule
+  await safeAddColumn('Schedule', 'dayGroupId', 'TEXT')
+  try {
+    await client.execute(`CREATE INDEX IF NOT EXISTS "Schedule_dayGroupId_idx" ON "Schedule"("dayGroupId");`)
+    console.log('✓ Schedule.dayGroupId index')
+  } catch { /* already exists */ }
+
+  // v7: Score photo URL on Game
+  await safeAddColumn('Game', 'scorePhoto', 'TEXT')
+
   // v4: Setting table for admin-configurable values
   await client.execute(`
     CREATE TABLE IF NOT EXISTS "Setting" (
