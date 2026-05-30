@@ -273,7 +273,12 @@ export async function extractCellsFromImage(
       const vx1 = Math.floor(pl + pw * 0.90)
       const vy0 = Math.floor(pt + ph * 0.28)
       const vy1 = Math.floor(pt + ph * 0.62)
-      const vp  = buildVProfile(data, W, vx0, vx1, vy0, vy1)
+
+      // vpBlack: darkThresh=80 → 印刷黒線(#000≈0)のみ検出、灰色内側線(#555≈85)を除外
+      // 外枠線(1.2pt solid #000)の暗度比率を精度よく検出するため広い範囲をスキャン
+      const vy0b = Math.floor(pt + ph * 0.09)  // ヘッダー行から
+      const vy1b = Math.floor(pt + ph * 0.65)  // 打者行末まで
+      const vpBlack = buildVProfile(data, W, vx0, vx1, vy0b, vy1b, 80)
 
       // ④ 各打者行の上下境界をスナップ
       // minDark=0.25 : 実線（~90%）は通すが、0.5pt点線（~30%）は拾わない
@@ -287,26 +292,38 @@ export async function extractCellsFromImage(
         })
       }
 
-      // ⑤ 各イニング列の左右境界
+      // ⑤ イニング列境界の自動キャリブレーション
       //
-      // ★必ず templateInns(=7) で列幅を計算する★
-      // 理由: 印刷シートは常に7列。ゲームが5回戦でも7列が印刷されており、
-      //       先頭 innings 列にデータが入っている。
-      //       innings(=5) で割ると列幅が1.4倍になり、「打点欄の縦線」を
-      //       次の列の左境界と誤認識して1セルが2セルに分裂する。
+      // 問題: CSSマージン6mm想定→TMPL.innStart=0.297 だが、
+      //       実際のプリンターは8-10mmマージンを使うため ~1% ズレが生じ
+      //       打点欄が隣列に漏れて「21」→「2」+「1」に分裂する。
       //
-      // スナップなし（TMPL値直接使用）:
-      //   各列内の打点欄縦線(1.2pt solid #555)もプロファイルに現れるため、
-      //   snapToLine が誤ってその線にスナップする危険を避ける。
-      //   TMPL値はCSS定義から導出した正確な値なのでスナップ不要。
-      const innColWidth = (TMPL.innEnd - TMPL.innStart) / TMPL.templateInns
+      // 解決: vpBlack(darkThresh=80) でイニング列の実際の外枠線位置を検出。
+      //   外枠(1.2pt solid #000 → 写真輝度≈0-60): thresh=80未満 → 検出○
+      //   内側線(1.2pt solid #555 → 写真輝度≈85-140): thresh=80超 → 除外○
+      //
+      // ★常に templateInns=7 で列幅を計算する（ゲーム回数ではない）★
+      const colSnapR = Math.floor(pw * 0.05)  // ±5%の探索半径
+      const actualInnStart = snapToLine(vpBlack, Math.floor(pl + pw * TMPL.innStart), vx0, colSnapR, 0.004)
+      const actualInnEnd   = snapToLine(vpBlack, Math.floor(pl + pw * TMPL.innEnd),   vx0, colSnapR, 0.004)
+
+      // 実測値が不合理（列幅<10px や逆転）なら TMPL値にフォールバック
+      const innWidthPx = actualInnEnd - actualInnStart
+      const minExpected = pw * (TMPL.innEnd - TMPL.innStart) * 0.7
+      const useActual   = innWidthPx > minExpected
+
+      const innColWidthPx = useActual
+        ? innWidthPx / TMPL.templateInns
+        : pw * (TMPL.innEnd - TMPL.innStart) / TMPL.templateInns
+      const innOriginPx = useActual
+        ? actualInnStart
+        : Math.floor(pl + pw * TMPL.innStart)
+
       const colBounds: Array<{ left: number; right: number }> = []
       for (let n = 0; n < innings; n++) {
-        const tL = TMPL.innStart + n * innColWidth
-        const tR = tL + innColWidth
         colBounds.push({
-          left:  Math.floor(pl + pw * tL),
-          right: Math.floor(pl + pw * tR),
+          left:  Math.round(innOriginPx + n * innColWidthPx),
+          right: Math.round(innOriginPx + (n + 1) * innColWidthPx),
         })
       }
 
