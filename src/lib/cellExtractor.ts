@@ -215,17 +215,19 @@ function extractCellRect(
 function hasContent(
   canvas: HTMLCanvasElement,
   darkThreshold = 150,
-  minDarkRatio  = 0.04,
+  minDarkRatio  = 0.02,
 ): boolean {
-  // セル境界線（1.2pt solid）が与えるダークピクセルを除外するため
-  // 上下左右 6px のマージンをトリムしてから判定する
+  // ab-left エリア (左60%) のみチェック
+  // 理由: ab-right (右36%) は常に灰色背景 #efefef が印刷されており、
+  //       写真では輝度 120-140 程度に見え darkThreshold=150 未満になりやすい。
+  //       ab-left は白背景なので手書き文字がある場合のみ暗くなる。
   const margin = 6
-  const cw = canvas.width,  ch = canvas.height
-  const iw = cw - margin * 2, ih = ch - margin * 2
-  if (iw <= 0 || ih <= 0) return false
+  const checkW = Math.floor(canvas.width * 0.60) - margin  // ab-left内に収まる幅
+  const checkH = canvas.height - margin * 2
+  if (checkW <= 0 || checkH <= 0) return false
   const ctx  = canvas.getContext('2d')!
-  const data = ctx.getImageData(margin, margin, iw, ih).data
-  const total = iw * ih
+  const data = ctx.getImageData(margin, margin, checkW, checkH).data
+  const total = checkW * checkH
   let dark = 0
   for (let i = 0; i < data.length; i += 4) {
     if ((data[i] + data[i+1] + data[i+2]) / 3 < darkThreshold) dark++
@@ -267,18 +269,20 @@ export async function extractCellsFromImage(
       const hy1 = Math.floor(pt + ph * 0.70)
       const hp  = buildHProfile(data, W, hx0, hx1, hy0, hy1)
 
-      // ③ 垂直プロファイル（列境界検出用）
-      // 打者行の中央帯（y: 28%〜62%）で x: 22%〜90% をスキャン
-      const vx0 = Math.floor(pl + pw * 0.22)
-      const vx1 = Math.floor(pl + pw * 0.90)
-      const vy0 = Math.floor(pt + ph * 0.28)
-      const vy1 = Math.floor(pt + ph * 0.62)
-
-      // vpBlack: darkThresh=80 → 印刷黒線(#000≈0)のみ検出、灰色内側線(#555≈85)を除外
-      // 外枠線(1.2pt solid #000)の暗度比率を精度よく検出するため広い範囲をスキャン
-      const vy0b = Math.floor(pt + ph * 0.09)  // ヘッダー行から
-      const vy1b = Math.floor(pt + ph * 0.65)  // 打者行末まで
-      const vpBlack = buildVProfile(data, W, vx0, vx1, vy0b, vy1b, 80)
+      // ③ ヘッダー行スキャン（列位置キャリブレーション用）
+      //
+      // ★ヘッダー行(y: 9%〜14%)を使う理由★
+      // - 手書き文字が一切ない → 手書きが作る誤ピークが発生しない
+      // - ab-left/ab-right 分割縦線が存在しない → 外枠のみ検出できる
+      //
+      // イニングスコア行 + 打者ヘッダー行はともに通常の table セルで
+      // 内側縦線 (.ab-right) を持たない。この範囲の垂直プロファイルに
+      // 現れるピークは必ず外枠線(1.2pt solid #000)のみ。
+      const vhx0 = Math.floor(pl + pw * 0.25)
+      const vhx1 = Math.floor(pl + pw * 0.90)
+      const vhy0 = Math.floor(pt + ph * 0.09)
+      const vhy1 = Math.floor(pt + ph * 0.14)
+      const vpHdr = buildVProfile(data, W, vhx0, vhx1, vhy0, vhy1, 120)
 
       // ④ 各打者行の上下境界をスナップ
       // minDark=0.25 : 実線（~90%）は通すが、0.5pt点線（~30%）は拾わない
@@ -294,18 +298,13 @@ export async function extractCellsFromImage(
 
       // ⑤ イニング列境界の自動キャリブレーション
       //
-      // 問題: CSSマージン6mm想定→TMPL.innStart=0.297 だが、
-      //       実際のプリンターは8-10mmマージンを使うため ~1% ズレが生じ
-      //       打点欄が隣列に漏れて「21」→「2」+「1」に分裂する。
-      //
-      // 解決: vpBlack(darkThresh=80) でイニング列の実際の外枠線位置を検出。
-      //   外枠(1.2pt solid #000 → 写真輝度≈0-60): thresh=80未満 → 検出○
-      //   内側線(1.2pt solid #555 → 写真輝度≈85-140): thresh=80超 → 除外○
+      // vpHdr のピーク（手書きなし・外枠のみ）から
+      // 実際の innStart・innEnd 位置を検出してプリンターマージン誤差を補正する
       //
       // ★常に templateInns=7 で列幅を計算する（ゲーム回数ではない）★
       const colSnapR = Math.floor(pw * 0.05)  // ±5%の探索半径
-      const actualInnStart = snapToLine(vpBlack, Math.floor(pl + pw * TMPL.innStart), vx0, colSnapR, 0.004)
-      const actualInnEnd   = snapToLine(vpBlack, Math.floor(pl + pw * TMPL.innEnd),   vx0, colSnapR, 0.004)
+      const actualInnStart = snapToLine(vpHdr, Math.floor(pl + pw * TMPL.innStart), vhx0, colSnapR, 0.004)
+      const actualInnEnd   = snapToLine(vpHdr, Math.floor(pl + pw * TMPL.innEnd),   vhx0, colSnapR, 0.004)
 
       // 実測値が不合理（列幅<10px や逆転）なら TMPL値にフォールバック
       const innWidthPx = actualInnEnd - actualInnStart
