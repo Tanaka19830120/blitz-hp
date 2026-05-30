@@ -37,20 +37,29 @@ export interface ExtractionResult {
 
 // テンプレート座標定数（紙外縁からの比率 = 紙全体 210×297mm に対する比率）
 //
-// 旧値は「コンテンツ領域（4隅マーカー内、約198×285mm）に対する比率」だったため
-// paper座標に変換: paper_x = (6 + tmpl_x * 198) / 210
-//                  paper_y = (6 + tmpl_y * 285) / 297
+// 変換式: paper_x = (6 + content_x * 198) / 210
+//         paper_y = (6 + content_y * 285) / 297
 //
-//   innStart:  (6 + 0.285 * 198) / 210 = 0.297
-//   innEnd:    (6 + 0.850 * 198) / 210 = 0.830
-//   tableTop:  (6 + 0.128 * 285) / 297 = 0.143
-//   rowHeight: 14mm / 297mm             = 0.0472
+// content座標（scorebook-sheet/page.tsx より）:
+//   固定列  : 打順4.5% + 番4% + 名前15% + 守5%  = 28.5%  → innStart
+//   スタット: 打3%+安3%+点3%+盗3%+四3%          = 15%
+//   イニング: 100% - 28.5% - 15%               = 56.5%  → innStart〜innEnd
+//
+//   innStart_content = 0.285 → paper: (6 + 0.285*198)/210 = 0.297
+//   innEnd_content   = 0.850 → paper: (6 + 0.850*198)/210 = 0.830
+//   tableTop_content = 0.128 → paper: (6 + 0.128*285)/297 = 0.143
+//   rowHeight = 14mm / 297mm = 0.0472
+//
+// ★重要: templateInns は印刷テンプレートの固定列数（7）。
+//         ゲームのイニング数ではない。列幅計算は常にこの値で割る。
+//         5回戦でも7列が印刷され、先頭5列にデータが入る。
 const TMPL = {
-  innStart:  0.297,
-  innEnd:    0.830,
-  tableTop:  0.143,
-  rowHeight: 0.0472,
-  batters:   9,
+  innStart:     0.297,
+  innEnd:       0.830,
+  tableTop:     0.143,
+  rowHeight:    0.0472,
+  templateInns: 7,   // 印刷シートの固定イニング列数（page.tsx: const innings = 7）
+  batters:      9,
 } as const
 
 // ── 紙の境界を検出 ────────────────────────────────────────────
@@ -278,16 +287,26 @@ export async function extractCellsFromImage(
         })
       }
 
-      // ⑤ 各イニング列の左右境界をスナップ
-      // minDark=0.08 : 縦実線を確実に捕捉
-      const innWidth = (TMPL.innEnd - TMPL.innStart) / innings
+      // ⑤ 各イニング列の左右境界
+      //
+      // ★必ず templateInns(=7) で列幅を計算する★
+      // 理由: 印刷シートは常に7列。ゲームが5回戦でも7列が印刷されており、
+      //       先頭 innings 列にデータが入っている。
+      //       innings(=5) で割ると列幅が1.4倍になり、「打点欄の縦線」を
+      //       次の列の左境界と誤認識して1セルが2セルに分裂する。
+      //
+      // スナップなし（TMPL値直接使用）:
+      //   各列内の打点欄縦線(1.2pt solid #555)もプロファイルに現れるため、
+      //   snapToLine が誤ってその線にスナップする危険を避ける。
+      //   TMPL値はCSS定義から導出した正確な値なのでスナップ不要。
+      const innColWidth = (TMPL.innEnd - TMPL.innStart) / TMPL.templateInns
       const colBounds: Array<{ left: number; right: number }> = []
       for (let n = 0; n < innings; n++) {
-        const tL = TMPL.innStart + n * innWidth
-        const tR = tL + innWidth
+        const tL = TMPL.innStart + n * innColWidth
+        const tR = tL + innColWidth
         colBounds.push({
-          left:  snapToLine(vp, Math.floor(pl + pw * tL), vx0, snapR, 0.08),
-          right: snapToLine(vp, Math.floor(pl + pw * tR), vx0, snapR, 0.08),
+          left:  Math.floor(pl + pw * tL),
+          right: Math.floor(pl + pw * tR),
         })
       }
 
