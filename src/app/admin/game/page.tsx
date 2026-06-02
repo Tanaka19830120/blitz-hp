@@ -22,11 +22,16 @@ async function saveGame(scheduleId: string, json: string, sendLine: boolean): Pr
   else if (ourScore < opponentScore) result = 'LOSE'
   else                               result = 'DRAW'
 
+  // イニングスコアを {blitz, opponent} 形式で保存（公開ページ表示用）
+  const inningScores = data.inningScores
+    ? JSON.stringify({ blitz: data.inningScores.our, opponent: data.inningScores.opponent })
+    : null
+
   // Game を upsert（スコアブック JSON も保存）
   const game = await prisma.game.upsert({
     where:  { scheduleId },
-    create: { scheduleId, ourScore, opponentScore, result, note, scorebook: json },
-    update: { ourScore, opponentScore, result, note, scorebook: json },
+    create: { scheduleId, ourScore, opponentScore, result, note, scorebook: json, inningScores },
+    update: { ourScore, opponentScore, result, note, scorebook: json, inningScores },
   })
 
   // 既存の個人成績・投手成績を全削除して再挿入（削除されたメンバーを残さないため）
@@ -103,6 +108,7 @@ async function saveGame(scheduleId: string, json: string, sendLine: boolean): Pr
   }
 
   revalidatePath('/results')
+  revalidatePath(`/results/${scheduleId}`)
   revalidatePath('/stats')
   revalidatePath('/')
   revalidatePath('/admin/game')

@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { calcBatterStats, cellColor, codeToJa, type ScoreBookData, type BatterStats } from '@/lib/scorebook'
 
 function formatDate(date: Date) {
   return new Date(date).toLocaleDateString('ja-JP', {
@@ -16,6 +17,26 @@ function typeLabel(type: string) {
   if (type === 'TOURNAMENT') return { label: 'トーナメント', cls: 'text-[#fbbf24] border-[#d97706]/40 bg-[#d97706]/10' }
   return                            { label: '練習試合',  cls: 'text-[#94a3b8] border-[#1e3a5f]    bg-[#1e3a5f]/20'  }
 }
+
+function avgStr(h: number, ab: number) {
+  return ab > 0 ? (h / ab).toFixed(3).replace('0.', '.') : '---'
+}
+
+// 打撃成績テーブルの合計列定義
+const STAT_COLS: { key: keyof BatterStats; label: string; always?: boolean }[] = [
+  { key: 'ab',       label: '打数', always: true },
+  { key: 'h',        label: '安打', always: true },
+  // 打率は別途算出
+  { key: 'doubles',  label: '二' },
+  { key: 'triples',  label: '三' },
+  { key: 'homeRuns', label: '本' },
+  { key: 'rbi',      label: '打点', always: true },
+  { key: 'sb',       label: '盗塁' },
+  { key: 'bb',       label: '四球' },
+  { key: 'hbp',      label: '死球' },
+  { key: 'sac',      label: '犠打' },
+  { key: 'sf',       label: '犠飛' },
+]
 
 export default async function GameDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -43,39 +64,96 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
   const game = schedule.game
   const { label: typeLabel2, cls: typeCls } = typeLabel(schedule.type)
 
-  // イニングスコアをパース
+  // スコアブック JSON をパース（イニング別の打撃結果）
+  let scorebook: ScoreBookData | null = null
+  if (game.scorebook) {
+    try { scorebook = JSON.parse(game.scorebook) } catch { /* ignore */ }
+  }
+
+  // イニングスコアをパース（専用カラム優先 → 無ければスコアブックJSONから復元）
   let inningScores: { blitz: (number | null)[]; opponent: (number | null)[] } | null = null
   if (game.inningScores) {
     try { inningScores = JSON.parse(game.inningScores) } catch { /* ignore */ }
   }
+  if (!inningScores && scorebook?.inningScores) {
+    inningScores = {
+      blitz:    scorebook.inningScores.our,
+      opponent: scorebook.inningScores.opponent,
+    }
+  }
 
-  // 打者成績（全選手表示: 途中出場・守備のみも含む）
-  const battingStats = game.stats
+  // スコアブックの打者に紐づく選手名を取得
+  let playerMap = new Map<string, { name: string; number: number | null }>()
+  if (scorebook) {
+    const userIds = Array.from(new Set(
+      scorebook.batters
+        .flatMap(b => [b.userId, ...(b.subs?.map(s => s.userId) ?? [])])
+        .filter(Boolean)
+    ))
+    if (userIds.length > 0) {
+      const users = await prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, name: true, number: true },
+      })
+      playerMap = new Map(users.map(u => [u.id, { name: u.name ?? '', number: u.number ?? null }]))
+    }
+  }
 
-  // チーム集計
-  const totals = battingStats.reduce(
-    (acc, s) => ({
-      pa:  acc.pa  + s.plateAppearances,
-      ab:  acc.ab  + s.atBats,
-      h:   acc.h   + s.hits,
-      hr:  acc.hr  + s.homeRuns,
-      rbi: acc.rbi + s.rbi,
-      r:   acc.r   + s.runs,
-      sb:  acc.sb  + s.stolenBases,
-      so:  acc.so  + s.strikeouts,
-      bb:  acc.bb  + s.walks,
-      hbp: acc.hbp + s.hitByPitch,
-      sac: acc.sac + s.sacrificeBunts,
-      sf:  acc.sf  + s.sacrificeFlies,
-      d:   acc.d   + s.doubles,
-      t:   acc.t   + s.triples,
-    }),
-    { pa: 0, ab: 0, h: 0, hr: 0, rbi: 0, r: 0, sb: 0, so: 0, bb: 0, hbp: 0, sac: 0, sf: 0, d: 0, t: 0 }
-  )
-  const teamAvg = totals.ab > 0 ? (totals.h / totals.ab).toFixed(3).replace('0.', '.') : '---'
+  // スコアブックがある場合: イニング別＋合計を1テーブルで表示するための行データを構築
+  const innings = scorebook?.innings ?? inningScores?.blitz.length ?? 7
+  const bookRows = scorebook
+    ? scorebook.batters
+        .filter(b => b.userId && (Object.keys(b.cells).length > 0 || (b.subs?.length ?? 0) > 0))
+        .map(b => {
+          const stats = calcBatterStats(b.cells)
+          const player = playerMap.get(b.userId)
+          const subNames = (b.subs ?? [])
+            .map(s => playerMap.get(s.userId))
+            .filter(Boolean)
+            .map((p, i) => `${p!.number != null ? `#${p!.number} ` : ''}${p!.name}（${b.subs![i].fromInning}回〜）`)
+          return {
+            order: b.order,
+            name: player?.name ?? '(未設定)',
+            number: player?.number ?? null,
+            position: b.position ?? '',
+            cells: b.cells,
+            stats,
+            subNames,
+          }
+        })
+        .sort((a, b) => a.order - b.order)
+    : []
+
+  // チーム集計（スコアブックがあればそこから、なければ game.stats から）
+  const totals = scorebook
+    ? bookRows.reduce(
+        (acc, r) => {
+          for (const k of Object.keys(acc) as (keyof BatterStats)[]) acc[k] += r.stats[k]
+          return acc
+        },
+        { ...{ pa: 0, ab: 0, h: 0, doubles: 0, triples: 0, homeRuns: 0, rbi: 0, sb: 0, bb: 0, hbp: 0, sac: 0, sf: 0, k: 0 } } as BatterStats
+      )
+    : game.stats.reduce(
+        (acc, s) => ({
+          ...acc,
+          ab:  acc.ab  + s.atBats,
+          h:   acc.h   + s.hits,
+          homeRuns: acc.homeRuns + s.homeRuns,
+          rbi: acc.rbi + s.rbi,
+          sb:  acc.sb  + s.stolenBases,
+          bb:  acc.bb  + s.walks,
+          hbp: acc.hbp + s.hitByPitch,
+          sac: acc.sac + s.sacrificeBunts,
+          sf:  acc.sf  + s.sacrificeFlies,
+          doubles: acc.doubles + s.doubles,
+          triples: acc.triples + s.triples,
+        }),
+        { pa: 0, ab: 0, h: 0, doubles: 0, triples: 0, homeRuns: 0, rbi: 0, sb: 0, bb: 0, hbp: 0, sac: 0, sf: 0, k: 0 } as BatterStats
+      )
+  const teamAvg = avgStr(totals.h, totals.ab)
 
   return (
-    <div className="pt-16 max-w-5xl mx-auto px-4 py-12">
+    <div className="pt-16 max-w-6xl mx-auto px-4 py-12">
       {/* パンくずリスト */}
       <div className="flex items-center gap-2 text-sm text-[#64748b] mb-6">
         <Link href="/results" className="hover:text-[#60a5fa] transition-colors">試合結果</Link>
@@ -171,93 +249,149 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
         </div>
       )}
 
-      {/* 打者成績 */}
-      {battingStats.length > 0 ? (
+      {/* 打者成績（イニング別 + 合計） */}
+      {scorebook && bookRows.length > 0 ? (
         <div className="glass-card rounded-2xl p-4 mb-6">
           <h2 className="text-sm font-bold text-[#94a3b8] uppercase tracking-wider mb-2">
             打者成績
           </h2>
-          <p className="text-[10px] text-[#475569] mb-2 sm:hidden">← 横スクロールで全成績を確認</p>
+          <p className="text-[10px] text-[#475569] mb-2">← 横スクロールでイニング別結果・全成績を確認</p>
           <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse min-w-[420px]">
-            <thead>
-              <tr className="text-xs text-[#64748b] border-b border-[#1e3a5f]">
-                <th className="py-2 pr-1 text-center w-6">#</th>
-                <th className="py-2 px-2 text-left">選手</th>
-                <th className="py-2 px-2 text-center w-10 hidden sm:table-cell">守備</th>
-                <th className="py-2 px-2 text-center w-10 hidden sm:table-cell" title="打席">打席</th>
-                <th className="py-2 px-2 text-center w-10" title="打数">打数</th>
-                <th className="py-2 px-2 text-center w-10" title="安打">安打</th>
-                <th className="py-2 px-2 text-center w-12" title="打率">打率</th>
-                <th className="py-2 px-2 text-center w-10 hidden sm:table-cell" title="本塁打">本</th>
-                <th className="py-2 px-2 text-center w-10" title="打点">打点</th>
-                <th className="py-2 px-2 text-center w-10 hidden sm:table-cell" title="得点">得点</th>
-                <th className="py-2 px-2 text-center w-10 hidden sm:table-cell" title="盗塁">盗塁</th>
-                <th className="py-2 px-2 text-center w-10 hidden sm:table-cell" title="二塁打">2B</th>
-                <th className="py-2 px-2 text-center w-10 hidden sm:table-cell" title="三塁打">3B</th>
-                <th className="py-2 px-2 text-center w-10 hidden sm:table-cell" title="四球">四球</th>
-                <th className="py-2 px-2 text-center w-10 hidden sm:table-cell" title="死球">死球</th>
-                <th className="py-2 px-2 text-center w-10 hidden sm:table-cell" title="犠打">犠打</th>
-                <th className="py-2 px-2 text-center w-10 hidden sm:table-cell" title="犠飛">犠飛</th>
-              </tr>
-            </thead>
-            <tbody>
-              {battingStats.map((s, i) => {
-                const avg = s.atBats > 0
-                  ? (s.hits / s.atBats).toFixed(3).replace('0.', '.')
-                  : '---'
-                return (
-                  <tr key={s.id} className={`border-b border-[#0f2035]/60 hover:bg-[#1e3a5f]/10 ${i % 2 === 0 ? '' : 'bg-[#0a1628]/20'}`}>
+            <table className="text-xs border-collapse min-w-[640px]">
+              <thead>
+                <tr className="text-[#64748b] border-b border-[#1e3a5f]">
+                  <th className="py-2 pr-1 text-center w-6">#</th>
+                  <th className="py-2 px-2 text-left w-32">選手</th>
+                  {Array.from({ length: innings }, (_, i) => (
+                    <th key={i} className="py-2 px-1 text-center"
+                      style={{ minWidth: '52px', borderLeft: '1px solid #1e3a5f' }}>{i + 1}</th>
+                  ))}
+                  <th className="py-2 px-2 text-center w-12" style={{ borderLeft: '1px solid #1e3a5f' }}>打率</th>
+                  {STAT_COLS.map(c => (
+                    <th key={c.key} className={`py-2 px-1 text-center w-9 ${c.always ? '' : 'hidden sm:table-cell'}`}>{c.label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {bookRows.map((r, idx) => (
+                  <tr key={r.order} className={`border-b border-[#0f2035]/60 ${idx % 2 === 0 ? '' : 'bg-[#0a1628]/20'}`}>
+                    <td className="py-1.5 pr-1 text-center text-[#64748b]">{r.order}</td>
+                    <td className="py-1.5 px-2">
+                      <div className="flex items-center gap-1.5">
+                        {r.number != null && (
+                          <span className="text-[10px] text-[#475569] shrink-0">#{r.number}</span>
+                        )}
+                        <span className="font-medium text-[#e2e8f0]">{r.name}</span>
+                      </div>
+                      {r.subNames.length > 0 && (
+                        <div className="text-[10px] text-[#a78bfa] mt-0.5">↳ {r.subNames.join(' / ')}</div>
+                      )}
+                    </td>
+                    {Array.from({ length: innings }, (_, i) => {
+                      const raw = r.cells[i + 1] ?? ''
+                      const parts = raw.split(',').filter(Boolean)
+                      return (
+                        <td key={i} className="py-1.5 px-1 text-center align-middle"
+                          style={{ borderLeft: '1px solid #1e3a5f' }}>
+                          {parts.length === 0 ? (
+                            <span className="text-[#1e3a5f]">–</span>
+                          ) : (
+                            <div className="flex flex-col items-center gap-0.5">
+                              {parts.map((p, j) => {
+                                const ja = codeToJa(p)
+                                return ja ? (
+                                  <span key={j} className={`${cellColor(p)} whitespace-nowrap`}>{ja}</span>
+                                ) : null
+                              })}
+                            </div>
+                          )}
+                        </td>
+                      )
+                    })}
+                    <td className={`py-1.5 px-2 text-center font-mono ${r.stats.ab > 0 && r.stats.h / r.stats.ab >= 0.3 ? 'text-[#22c55e]' : 'text-[#94a3b8]'}`}
+                      style={{ borderLeft: '1px solid #1e3a5f' }}>
+                      {avgStr(r.stats.h, r.stats.ab)}
+                    </td>
+                    {STAT_COLS.map(c => {
+                      const v = r.stats[c.key]
+                      const highlight = c.key === 'h' ? 'font-bold text-[#e2e8f0]'
+                        : c.key === 'homeRuns' && v > 0 ? 'text-[#fbbf24] font-bold'
+                        : c.key === 'rbi' && v > 0 ? 'text-[#60a5fa]'
+                        : v > 0 ? 'text-[#94a3b8]' : 'text-[#475569]'
+                      return (
+                        <td key={c.key} className={`py-1.5 px-1 text-center ${c.always ? '' : 'hidden sm:table-cell'} ${highlight}`}>
+                          {v}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-[#1e3a5f] font-bold">
+                  <td colSpan={2} className="py-2 px-2 text-[#64748b]">チーム計</td>
+                  <td colSpan={innings} style={{ borderLeft: '1px solid #1e3a5f' }} />
+                  <td className="py-2 px-2 text-center font-mono text-[#60a5fa]" style={{ borderLeft: '1px solid #1e3a5f' }}>{teamAvg}</td>
+                  {STAT_COLS.map(c => (
+                    <td key={c.key} className={`py-2 px-1 text-center ${c.always ? '' : 'hidden sm:table-cell'} ${
+                      c.key === 'homeRuns' ? 'text-[#fbbf24]' : c.key === 'rbi' ? 'text-[#60a5fa]' : 'text-[#e2e8f0]'
+                    }`}>
+                      {totals[c.key]}
+                    </td>
+                  ))}
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      ) : game.stats.length > 0 ? (
+        /* スコアブック JSON が無い旧データ: 合計のみのフォールバック表示 */
+        <div className="glass-card rounded-2xl p-4 mb-6">
+          <h2 className="text-sm font-bold text-[#94a3b8] uppercase tracking-wider mb-2">
+            打者成績
+          </h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse min-w-[420px]">
+              <thead>
+                <tr className="text-xs text-[#64748b] border-b border-[#1e3a5f]">
+                  <th className="py-2 pr-1 text-center w-6">#</th>
+                  <th className="py-2 px-2 text-left">選手</th>
+                  <th className="py-2 px-2 text-center w-10">打数</th>
+                  <th className="py-2 px-2 text-center w-10">安打</th>
+                  <th className="py-2 px-2 text-center w-12">打率</th>
+                  <th className="py-2 px-2 text-center w-10 hidden sm:table-cell">本</th>
+                  <th className="py-2 px-2 text-center w-10">打点</th>
+                  <th className="py-2 px-2 text-center w-10 hidden sm:table-cell">盗塁</th>
+                  <th className="py-2 px-2 text-center w-10 hidden sm:table-cell">2B</th>
+                  <th className="py-2 px-2 text-center w-10 hidden sm:table-cell">3B</th>
+                  <th className="py-2 px-2 text-center w-10 hidden sm:table-cell">四球</th>
+                </tr>
+              </thead>
+              <tbody>
+                {game.stats.map((s, i) => (
+                  <tr key={s.id} className={`border-b border-[#0f2035]/60 ${i % 2 === 0 ? '' : 'bg-[#0a1628]/20'}`}>
                     <td className="py-2 pr-1 text-center text-[#64748b] text-xs">{s.battingOrder ?? '–'}</td>
                     <td className="py-2 px-2">
                       <div className="flex items-center gap-1.5">
                         {s.user.number != null && (
-                          <span className="text-xs text-[#475569] w-5 text-right shrink-0">{s.user.number}</span>
+                          <span className="text-xs text-[#475569]">#{s.user.number}</span>
                         )}
                         <span className="font-medium text-[#e2e8f0] text-sm">{s.user.name}</span>
                       </div>
                     </td>
-                    <td className="py-2 px-2 text-center text-[#64748b] text-xs hidden sm:table-cell">{s.position ?? '–'}</td>
-                    <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{s.plateAppearances || '–'}</td>
                     <td className="py-2 px-2 text-center text-[#94a3b8]">{s.atBats}</td>
                     <td className="py-2 px-2 text-center font-bold text-[#e2e8f0]">{s.hits}</td>
-                    <td className={`py-2 px-2 text-center font-mono text-xs ${s.atBats > 0 && s.hits / s.atBats >= 0.3 ? 'text-[#22c55e]' : 'text-[#64748b]'}`}>{avg}</td>
-                    <td className="py-2 px-2 text-center hidden sm:table-cell">{s.homeRuns > 0 ? <span className="text-[#fbbf24] font-bold">{s.homeRuns}</span> : <span className="text-[#475569]">0</span>}</td>
-                    <td className="py-2 px-2 text-center">{s.rbi > 0 ? <span className="text-[#60a5fa]">{s.rbi}</span> : <span className="text-[#475569]">0</span>}</td>
-                    <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{s.runs}</td>
+                    <td className="py-2 px-2 text-center font-mono text-xs text-[#64748b]">{avgStr(s.hits, s.atBats)}</td>
+                    <td className="py-2 px-2 text-center hidden sm:table-cell">{s.homeRuns || 0}</td>
+                    <td className="py-2 px-2 text-center">{s.rbi || 0}</td>
                     <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{s.stolenBases || 0}</td>
                     <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{s.doubles || 0}</td>
                     <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{s.triples || 0}</td>
-                    <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{s.walks}</td>
-                    <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{s.hitByPitch || 0}</td>
-                    <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{s.sacrificeBunts || 0}</td>
-                    <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{s.sacrificeFlies || 0}</td>
+                    <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{s.walks || 0}</td>
                   </tr>
-                )
-              })}
-            </tbody>
-            {/* チーム合計 */}
-            <tfoot>
-              <tr className="border-t-2 border-[#1e3a5f] text-xs font-bold">
-                <td colSpan={2} className="py-2 px-2 text-[#64748b]">チーム計</td>
-                <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell"></td>
-                <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{totals.pa}</td>
-                <td className="py-2 px-2 text-center text-[#94a3b8]">{totals.ab}</td>
-                <td className="py-2 px-2 text-center text-[#e2e8f0]">{totals.h}</td>
-                <td className="py-2 px-2 text-center font-mono text-[#60a5fa]">{teamAvg}</td>
-                <td className="py-2 px-2 text-center text-[#fbbf24] hidden sm:table-cell">{totals.hr}</td>
-                <td className="py-2 px-2 text-center text-[#60a5fa]">{totals.rbi}</td>
-                <td className="py-2 px-2 text-center hidden sm:table-cell">{totals.r}</td>
-                <td className="py-2 px-2 text-center hidden sm:table-cell">{totals.sb}</td>
-                <td className="py-2 px-2 text-center hidden sm:table-cell">{totals.d}</td>
-                <td className="py-2 px-2 text-center hidden sm:table-cell">{totals.t}</td>
-                <td className="py-2 px-2 text-center hidden sm:table-cell">{totals.bb}</td>
-                <td className="py-2 px-2 text-center hidden sm:table-cell">{totals.hbp}</td>
-                <td className="py-2 px-2 text-center hidden sm:table-cell">{totals.sac}</td>
-                <td className="py-2 px-2 text-center hidden sm:table-cell">{totals.sf}</td>
-              </tr>
-            </tfoot>
-          </table>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       ) : (
@@ -329,20 +463,6 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
       {game.note && (
         <div className="glass-card rounded-2xl p-4 mb-6 text-sm text-[#94a3b8]">
           📝 {game.note}
-        </div>
-      )}
-
-      {/* スコア表写真 */}
-      {game.scorePhoto && (
-        <div className="glass-card rounded-2xl p-4 mb-6">
-          <h2 className="text-sm font-bold text-[#94a3b8] uppercase tracking-wider mb-3">
-            📷 スコア表
-          </h2>
-          <img
-            src={game.scorePhoto}
-            alt="スコア表"
-            className="w-full rounded-xl object-contain max-h-[40rem] bg-[#0d1b2a]"
-          />
         </div>
       )}
     </div>

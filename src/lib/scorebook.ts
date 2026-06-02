@@ -120,6 +120,42 @@ export function calcBatterStats(cells: Record<number, string>): BatterStats {
   return stats
 }
 
+/**
+ * Convert a single at-bat code to a Japanese label.
+ * 例: "1" → "安", "12" → "安(打点2)", "2" → "二安", "4" → "本(打点1)",
+ *     "1s" → "安・盗", "O" → "凡", "B" → "四球"
+ * 無効/空コードは空文字を返す。
+ */
+export function codeToJa(raw: string): string {
+  const code = raw.trim().toUpperCase()
+  if (!code) return ''
+  const m = code.match(/^([KGFO1234BDSX])([0-9S]*)$/)
+  if (!m) return ''
+  const r          = m[1]
+  const rest       = m[2] ?? ''
+  const digitMatch = rest.match(/[0-9]/)
+  const rbi        = digitMatch ? parseInt(digitMatch[0]) : (r === '4' ? 1 : 0)
+  const stolen     = rest.includes('S')
+
+  const base: Record<string, string> = {
+    O: '凡', K: '三振', G: 'ゴロ', F: '飛',
+    '1': '安', '2': '二安', '3': '三安', '4': '本',
+    B: '四球', D: '死球', S: '犠打', X: '犠飛',
+  }
+  let label = base[r] ?? r
+  if (rbi > 0) label += `(打点${rbi})`
+  if (stolen) label += '・盗'
+  return label
+}
+
+/**
+ * 1セル（カンマ区切りで複数打席を含む）を日本語ラベル配列に変換。
+ * 例: "1,O" → ["安", "凡"]
+ */
+export function cellToJaParts(raw: string): string[] {
+  return raw.split(',').map(p => codeToJa(p)).filter(Boolean)
+}
+
 /** Return a Tailwind text color class for a given cell code (for live coloring). */
 export function cellColor(code: string): string {
   const c = code.trim().toUpperCase()[0]
