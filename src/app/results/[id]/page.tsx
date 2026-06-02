@@ -176,11 +176,11 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
           )}
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-8">
-          <div className="text-center flex-1">
-            <div className="text-sm text-[#60a5fa] font-bold mb-1">BLITZ</div>
+        <div className="flex flex-row items-start justify-center gap-3 sm:gap-8">
+          <div className="text-center flex-1 min-w-0">
+            <div className="text-xs sm:text-sm text-[#60a5fa] font-bold mb-1 truncate">BLITZ</div>
             <div
-              className={`text-6xl font-black ${
+              className={`text-4xl sm:text-6xl font-black ${
                 game.result === 'WIN' ? 'text-[#22c55e]' :
                 game.result === 'LOSE' ? 'text-[#ef4444]' : 'text-[#f59e0b]'
               }`}
@@ -189,9 +189,9 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
             </div>
           </div>
 
-          <div className="flex flex-col items-center gap-1 pt-4">
+          <div className="flex flex-col items-center gap-1 pt-3 sm:pt-4 shrink-0">
             <span
-              className={`text-sm font-bold px-3 py-1 rounded-full ${
+              className={`text-xs sm:text-sm font-bold px-2 sm:px-3 py-1 rounded-full whitespace-nowrap ${
                 game.result === 'WIN'  ? 'bg-green-900/30 text-[#22c55e]' :
                 game.result === 'LOSE' ? 'bg-red-900/30 text-[#ef4444]'   :
                                          'bg-yellow-900/30 text-[#f59e0b]'
@@ -199,12 +199,12 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
             >
               {game.result === 'WIN' ? '勝利' : game.result === 'LOSE' ? '敗戦' : '引分'}
             </span>
-            <span className="text-[#1e3a5f] text-2xl font-black">–</span>
+            <span className="text-[#1e3a5f] text-xl sm:text-2xl font-black">–</span>
           </div>
 
-          <div className="text-center flex-1">
-            <div className="text-sm text-[#64748b] font-bold mb-1">{schedule.opponent}</div>
-            <div className="text-6xl font-black text-[#64748b]">{game.opponentScore}</div>
+          <div className="text-center flex-1 min-w-0">
+            <div className="text-xs sm:text-sm text-[#64748b] font-bold mb-1 truncate">{schedule.opponent}</div>
+            <div className="text-4xl sm:text-6xl font-black text-[#64748b]">{game.opponentScore}</div>
           </div>
         </div>
       </div>
@@ -268,7 +268,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
                   ))}
                   <th className="py-2 px-2 text-center w-12" style={{ borderLeft: '1px solid #1e3a5f' }}>打率</th>
                   {STAT_COLS.map(c => (
-                    <th key={c.key} className={`py-2 px-1 text-center w-9 ${c.always ? '' : 'hidden sm:table-cell'}`}>{c.label}</th>
+                    <th key={c.key} className="py-2 px-1 text-center w-9">{c.label}</th>
                   ))}
                 </tr>
               </thead>
@@ -319,7 +319,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
                         : c.key === 'rbi' && v > 0 ? 'text-[#60a5fa]'
                         : v > 0 ? 'text-[#94a3b8]' : 'text-[#475569]'
                       return (
-                        <td key={c.key} className={`py-1.5 px-1 text-center ${c.always ? '' : 'hidden sm:table-cell'} ${highlight}`}>
+                        <td key={c.key} className={`py-1.5 px-1 text-center ${highlight}`}>
                           {v}
                         </td>
                       )
@@ -333,7 +333,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
                   <td colSpan={innings} style={{ borderLeft: '1px solid #1e3a5f' }} />
                   <td className="py-2 px-2 text-center font-mono text-[#60a5fa]" style={{ borderLeft: '1px solid #1e3a5f' }}>{teamAvg}</td>
                   {STAT_COLS.map(c => (
-                    <td key={c.key} className={`py-2 px-1 text-center ${c.always ? '' : 'hidden sm:table-cell'} ${
+                    <td key={c.key} className={`py-2 px-1 text-center ${
                       c.key === 'homeRuns' ? 'text-[#fbbf24]' : c.key === 'rbi' ? 'text-[#60a5fa]' : 'text-[#e2e8f0]'
                     }`}>
                       {totals[c.key]}
