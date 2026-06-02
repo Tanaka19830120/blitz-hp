@@ -721,17 +721,22 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
               <tr
                 draggable
                 onDragStart={() => setDraggedTeam('our')}
-                onDragOver={e => e.preventDefault()}
-                onDrop={() => {
+                onDragOver={e => {
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'move'
+                }}
+                onDrop={e => {
+                  e.preventDefault()
                   if (draggedTeam === 'opponent') {
                     const temp = ourInnings
                     setOurInnings(opponentInnings)
                     setOpponentInnings(temp)
-                    setDraggedTeam(null)
                   }
+                  setDraggedTeam(null)
                 }}
+                onDragLeave={() => setDraggedTeam(null)}
                 onDragEnd={() => setDraggedTeam(null)}
-                className={`cursor-move select-none ${draggedTeam === 'our' ? 'opacity-50 bg-[#1e3a5f]' : ''}`}
+                className={`cursor-move select-none transition ${draggedTeam === 'our' ? 'opacity-50 bg-[#1e3a5f]' : draggedTeam === 'opponent' ? 'bg-[#1e3a5f] border-2 border-[#60a5fa]' : ''}`}
               >
                 <td className="text-right pr-2 font-medium text-[#60a5fa]">BLITZ</td>
                 {Array.from({ length: innings }, (_, i) => (
@@ -743,7 +748,7 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
                         const v = e.target.value === '' ? null : parseInt(e.target.value)
                         setOurInnings(prev => { const a = [...prev]; a[i] = v; return a })
                       }}
-                      className="w-full text-center text-sm py-0.5 text-[#60a5fa]"
+                      className="w-full text-center text-sm py-1 px-1 text-[#60a5fa] min-w-[60px]"
                     />
                   </td>
                 ))}
@@ -755,17 +760,22 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
               <tr
                 draggable
                 onDragStart={() => setDraggedTeam('opponent')}
-                onDragOver={e => e.preventDefault()}
-                onDrop={() => {
+                onDragOver={e => {
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'move'
+                }}
+                onDrop={e => {
+                  e.preventDefault()
                   if (draggedTeam === 'our') {
                     const temp = ourInnings
                     setOurInnings(opponentInnings)
                     setOpponentInnings(temp)
-                    setDraggedTeam(null)
                   }
+                  setDraggedTeam(null)
                 }}
+                onDragLeave={() => setDraggedTeam(null)}
                 onDragEnd={() => setDraggedTeam(null)}
-                className={`cursor-move select-none ${draggedTeam === 'opponent' ? 'opacity-50 bg-[#1e3a5f]' : ''}`}
+                className={`cursor-move select-none transition ${draggedTeam === 'opponent' ? 'opacity-50 bg-[#1e3a5f]' : draggedTeam === 'our' ? 'bg-[#1e3a5f] border-2 border-[#f59e0b]' : ''}`}
               >
                 <td className="text-right pr-2 font-medium text-[#f59e0b]">{scheduleInfo?.opponent || '相手'}</td>
                 {Array.from({ length: innings }, (_, i) => (
@@ -777,7 +787,7 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
                         const v = e.target.value === '' ? null : parseInt(e.target.value)
                         setOpponentInnings(prev => { const a = [...prev]; a[i] = v; return a })
                       }}
-                      className="w-full text-center text-sm py-0.5 text-[#f59e0b]"
+                      className="w-full text-center text-sm py-1 px-1 text-[#f59e0b] min-w-[60px]"
                     />
                   </td>
                 ))}
