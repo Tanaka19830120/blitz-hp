@@ -173,15 +173,8 @@ function playerLabel(p: PlayerOption): string {
 
 export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, savePhotoAction, lineConfigured, scheduleInfo }: Props) {
   // デバッグ: scheduleInfo 確認
-  console.log('[ScoreBookEditor] scheduleInfo:', scheduleInfo)
-
   /* ── スコア ── */
-  const [ourScore,      setOurScore]      = useState<string>(
-    initialData.ourScore != null ? String(initialData.ourScore) : ''
-  )
-  const [opponentScore, setOpponentScore] = useState<string>(
-    initialData.opponentScore != null ? String(initialData.opponentScore) : ''
-  )
+  // BLITZ得点はスコアブックの打点合計、相手得点はイニングスコア合計からライブ計算する
   const [note, setNote] = useState<string>(initialData.note ?? '')
   const [sendLine, setSendLine] = useState(false)
 
@@ -204,6 +197,12 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
   // イニングスコアの合計を自動計算
   const ourScoreTotal = ourInnings.reduce((sum: number, n) => sum + (n ?? 0), 0)
   const opponentScoreTotal = opponentInnings.reduce((sum: number, n) => sum + (n ?? 0), 0)
+
+  // スコアシート(打撃成績)の打点合計 → BLITZ 得点として使用（ライブ計算）
+  const ourRbiTotal = batters.reduce((sum, b) => sum + calcBatterStats(b.cells).rbi, 0)
+
+  // 先攻・後攻の表示順入れ替え（true なら相手チームを上に表示）
+  const [oppFirst, setOppFirst] = useState(false)
 
   // ── LINE 確認モーダル ──
   const [showLineModal, setShowLineModal] = useState(false)
@@ -387,17 +386,7 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
         addLog(`[WARNING] 写真アップロードは失敗しましたが、OCR結果は正常に取得できました`)
       }
 
-      // 読み取った全打点を合計して自動入力
-      let totalRbi = 0
-      console.log('[OCR Debug] extraction.cells:', extraction.cells)
-      for (const c of extraction.cells) {
-        console.log(`[OCR Debug] Cell Order:${c.order} Inning:${c.inning} ab1rbi:${c.ab1rbi} ab2rbi:${c.ab2rbi}`)
-        if (c.ab1rbi) totalRbi += parseInt(c.ab1rbi)
-        if (c.ab2rbi) totalRbi += parseInt(c.ab2rbi)
-      }
-      console.log('[OCR Debug] Total RBI:', totalRbi)
-      setOurScore(String(totalRbi))
-
+      // BLITZ 得点はスコアブックの打点合計からライブ計算されるため、ここでの代入は不要
       setOcrState('done')
       setOcrMessage(`✅ AI が ${cellCount} セルを読み込みました。内容を確認して保存してください。`)
       debugEntries.sort((a, b) => a.order !== b.order ? a.order - b.order : a.inning - b.inning)
@@ -614,7 +603,7 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
       innings,
       batters,
       pitchers,
-      ourScore:      ourScoreTotal || null,
+      ourScore:      ourRbiTotal || null,
       opponentScore: opponentScoreTotal || null,
       inningScores: {
         our:      Array.from({ length: innings }, (_, i) => ourInnings[i] ?? null),
@@ -625,7 +614,7 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
 
     // LINE 送信する場合はモーダルで確認
     if (sendLine && scheduleInfo) {
-      const preview = buildLinePreview(scheduleInfo, String(ourScoreTotal), String(opponentScoreTotal), note, batters, pitchers, players)
+      const preview = buildLinePreview(scheduleInfo, String(ourRbiTotal), String(opponentScoreTotal), note, batters, pitchers, players)
       setLinePreview(preview)
       setPendingData(data)
       setShowLineModal(true)
@@ -680,7 +669,7 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
           <div style={{ width: '8rem' }}>
             <label className="block text-xs text-[#64748b] mb-1">BLITZ 得点</label>
             <div className="text-2xl font-black text-center text-[#60a5fa] py-2">
-              {ourScoreTotal}
+              {ourRbiTotal}
             </div>
           </div>
           <div className="text-2xl font-black text-[#475569] pb-1">ー</div>
@@ -719,58 +708,56 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td className="text-right pr-2 font-medium text-[#60a5fa]">BLITZ</td>
-                {Array.from({ length: innings }, (_, i) => (
-                  <td key={i + 1} className="py-0.5 px-0.5">
-                    <input
-                      type="number" min={0} max={9}
-                      value={ourInnings[i] ?? ''}
-                      onChange={e => {
-                        const v = e.target.value === '' ? null : parseInt(e.target.value)
-                        setOurInnings(prev => { const a = [...prev]; a[i] = v; return a })
-                      }}
-                      className="w-full text-center text-sm py-1 px-1 text-[#60a5fa] min-w-[60px]"
-                    />
-                  </td>
-                ))}
-                <td className="text-center font-bold text-[#60a5fa] px-2"
-                  style={{ borderLeft: '1px solid #1e3a5f' }}>
-                  {ourScoreTotal || '─'}
-                </td>
-              </tr>
-              <tr>
-                <td className="text-right pr-2 font-medium text-[#f59e0b]">{scheduleInfo?.opponent || '相手'}</td>
-                {Array.from({ length: innings }, (_, i) => (
-                  <td key={i + 1} className="py-0.5 px-0.5">
-                    <input
-                      type="number" min={0} max={9}
-                      value={opponentInnings[i] ?? ''}
-                      onChange={e => {
-                        const v = e.target.value === '' ? null : parseInt(e.target.value)
-                        setOpponentInnings(prev => { const a = [...prev]; a[i] = v; return a })
-                      }}
-                      className="w-full text-center text-sm py-1 px-1 text-[#f59e0b] min-w-[60px]"
-                    />
-                  </td>
-                ))}
-                <td className="text-center font-bold text-[#f59e0b] px-2"
-                  style={{ borderLeft: '1px solid #1e3a5f' }}>
-                  {opponentScoreTotal || '─'}
-                </td>
-              </tr>
+              {(() => {
+                const ourRow = {
+                  key: 'our',
+                  label: 'BLITZ',
+                  color: '#60a5fa',
+                  innings: ourInnings,
+                  setInnings: setOurInnings,
+                  total: ourScoreTotal,
+                }
+                const oppRow = {
+                  key: 'opp',
+                  label: scheduleInfo?.opponent || '相手',
+                  color: '#f59e0b',
+                  innings: opponentInnings,
+                  setInnings: setOpponentInnings,
+                  total: opponentScoreTotal,
+                }
+                const rows = oppFirst ? [oppRow, ourRow] : [ourRow, oppRow]
+                return rows.map(row => (
+                  <tr key={row.key}>
+                    <td className="text-right pr-2 font-medium" style={{ color: row.color }}>{row.label}</td>
+                    {Array.from({ length: innings }, (_, i) => (
+                      <td key={i + 1} className="py-0.5 px-0.5">
+                        <input
+                          type="number" min={0} max={9}
+                          value={row.innings[i] ?? ''}
+                          onChange={e => {
+                            const v = e.target.value === '' ? null : parseInt(e.target.value)
+                            row.setInnings(prev => { const a = [...prev]; a[i] = v; return a })
+                          }}
+                          className="w-full text-center text-sm py-1 px-1 min-w-[60px]"
+                          style={{ color: row.color }}
+                        />
+                      </td>
+                    ))}
+                    <td className="text-center font-bold px-2"
+                      style={{ borderLeft: '1px solid #1e3a5f', color: row.color }}>
+                      {row.total || '─'}
+                    </td>
+                  </tr>
+                ))
+              })()}
             </tbody>
           </table>
           <div className="mt-2">
             <button
-              onClick={() => {
-                const temp = ourInnings
-                setOurInnings(opponentInnings)
-                setOpponentInnings(temp)
-              }}
+              onClick={() => setOppFirst(v => !v)}
               className="text-xs px-3 py-1.5 rounded-lg border border-[#94a3b8]/50 text-[#94a3b8] hover:border-[#94a3b8] hover:bg-[#94a3b8]/5 transition-all font-medium"
             >
-              ⇅ 先攻と後攻を入れ替え
+              ⇅ 先攻・後攻の表示を入れ替え
             </button>
           </div>
         </div>
