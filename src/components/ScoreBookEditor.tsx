@@ -222,8 +222,6 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
   const [showOcrDetail,   setShowOcrDetail]   = useState(false)
   const [debugLog, setDebugLog] = useState<string[]>([])  // 画面表示用デバッグログ
 
-  // ドラッグ&ドロップで先攻と後攻を入れ替え
-  const [draggedTeam, setDraggedTeam] = useState<'our' | 'opponent' | null>(null)
 
   async function handleOcrImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -721,26 +719,7 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
               </tr>
             </thead>
             <tbody>
-              <tr
-                draggable
-                onDragStart={() => setDraggedTeam('our')}
-                onDragOver={e => {
-                  e.preventDefault()
-                  e.dataTransfer.dropEffect = 'move'
-                }}
-                onDrop={e => {
-                  e.preventDefault()
-                  if (draggedTeam === 'opponent') {
-                    const temp = ourInnings
-                    setOurInnings(opponentInnings)
-                    setOpponentInnings(temp)
-                  }
-                  setDraggedTeam(null)
-                }}
-                onDragLeave={() => setDraggedTeam(null)}
-                onDragEnd={() => setDraggedTeam(null)}
-                className={`cursor-move select-none transition ${draggedTeam === 'our' ? 'opacity-50 bg-[#1e3a5f]' : draggedTeam === 'opponent' ? 'bg-[#1e3a5f] border-2 border-[#60a5fa]' : ''}`}
-              >
+              <tr>
                 <td className="text-right pr-2 font-medium text-[#60a5fa]">BLITZ</td>
                 {Array.from({ length: innings }, (_, i) => (
                   <td key={i + 1} className="py-0.5 px-0.5">
@@ -760,26 +739,7 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
                   {ourScoreTotal || '─'}
                 </td>
               </tr>
-              <tr
-                draggable
-                onDragStart={() => setDraggedTeam('opponent')}
-                onDragOver={e => {
-                  e.preventDefault()
-                  e.dataTransfer.dropEffect = 'move'
-                }}
-                onDrop={e => {
-                  e.preventDefault()
-                  if (draggedTeam === 'our') {
-                    const temp = ourInnings
-                    setOurInnings(opponentInnings)
-                    setOpponentInnings(temp)
-                  }
-                  setDraggedTeam(null)
-                }}
-                onDragLeave={() => setDraggedTeam(null)}
-                onDragEnd={() => setDraggedTeam(null)}
-                className={`cursor-move select-none transition ${draggedTeam === 'opponent' ? 'opacity-50 bg-[#1e3a5f]' : draggedTeam === 'our' ? 'bg-[#1e3a5f] border-2 border-[#f59e0b]' : ''}`}
-              >
+              <tr>
                 <td className="text-right pr-2 font-medium text-[#f59e0b]">{scheduleInfo?.opponent || '相手'}</td>
                 {Array.from({ length: innings }, (_, i) => (
                   <td key={i + 1} className="py-0.5 px-0.5">
@@ -801,6 +761,18 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
               </tr>
             </tbody>
           </table>
+          <div className="mt-2">
+            <button
+              onClick={() => {
+                const temp = ourInnings
+                setOurInnings(opponentInnings)
+                setOpponentInnings(temp)
+              }}
+              className="text-xs px-3 py-1.5 rounded-lg border border-[#94a3b8]/50 text-[#94a3b8] hover:border-[#94a3b8] hover:bg-[#94a3b8]/5 transition-all font-medium"
+            >
+              ⇅ 先攻と後攻を入れ替え
+            </button>
+          </div>
         </div>
       </div>
 
