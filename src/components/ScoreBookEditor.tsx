@@ -184,9 +184,7 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
   const [pitchers, setPitchers] = useState<PitcherSlot[]>(initialData.pitchers)
 
   /* ── イニングスコア ── */
-  const [ourInnings,      setOurInnings]      = useState<(number | null)[]>(
-    initialData.inningScores?.our      ?? Array(initialData.innings).fill(null)
-  )
+  // BLITZ はスコアブックからライブ計算（ourInningScores）。相手のみ手入力。
   const [opponentInnings, setOpponentInnings] = useState<(number | null)[]>(
     initialData.inningScores?.opponent ?? Array(initialData.innings).fill(null)
   )
@@ -194,12 +192,24 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
   const [isPending, startTransition] = useTransition()
   const [status, setStatus] = useState<'idle' | 'saved' | 'error'>('idle')
 
-  // イニングスコアの合計を自動計算
-  const ourScoreTotal = ourInnings.reduce((sum: number, n) => sum + (n ?? 0), 0)
+  // ── BLITZ のイニングスコアはスコアブック(打撃成績)からライブ計算 ──
+  // 各イニングの打点合計。打席のあったイニングは 0 でも数値、無ければ null(空欄)
+  const ourInningScores: (number | null)[] = (() => {
+    const arr: (number | null)[] = Array(initialData.innings).fill(null)
+    for (const b of batters) {
+      for (const [innStr, code] of Object.entries(b.cells)) {
+        const inn = parseInt(innStr)
+        if (inn < 1 || inn > initialData.innings || !code) continue
+        arr[inn - 1] = (arr[inn - 1] ?? 0) + calcBatterStats({ 0: code }).rbi
+      }
+    }
+    return arr
+  })()
+  const ourScoreTotal = ourInningScores.reduce((sum: number, n) => sum + (n ?? 0), 0)
   const opponentScoreTotal = opponentInnings.reduce((sum: number, n) => sum + (n ?? 0), 0)
 
-  // スコアシート(打撃成績)の打点合計 → BLITZ 得点として使用（ライブ計算）
-  const ourRbiTotal = batters.reduce((sum, b) => sum + calcBatterStats(b.cells).rbi, 0)
+  // BLITZ 得点（打点合計）
+  const ourRbiTotal = ourScoreTotal
 
   // 先攻・後攻の表示順入れ替え（true なら相手チームを上に表示）
   const [oppFirst, setOppFirst] = useState(false)
@@ -366,20 +376,7 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
         return { ...b, cells: Object.fromEntries(Object.entries(extracted).filter(([, v]) => v)) }
       }))
       addLog(`[STEP 7] 打者データ更新完了`)
-
-      // ── BLITZ のイニングスコアを読み取った打点から自動記入 ──
-      // 各イニングの打点合計を算出（打席のあったイニングは 0 も記入、無ければ空欄）
-      const inningRbi: (number | null)[] = Array(innings).fill(null)
-      for (const innMap of Object.values(batterCells)) {
-        for (const [innStr, code] of Object.entries(innMap)) {
-          const inn = parseInt(innStr)
-          if (inn < 1 || inn > innings || !code) continue
-          const rbi = calcBatterStats({ 0: code }).rbi
-          inningRbi[inn - 1] = (inningRbi[inn - 1] ?? 0) + rbi
-        }
-      }
-      setOurInnings(inningRbi)
-      addLog(`[STEP 7] イニングスコア自動記入: [${inningRbi.map(v => v ?? '-').join(',')}]`)
+      // BLITZ のイニングスコアは打者データ(b.cells)からライブ計算されるため自動反映される
 
       const cellCount = Object.values(batterCells).reduce((n, r) => n + Object.keys(r).length, 0)
       addLog(`[STEP 8] 完了: ${cellCount}セル読み込み成功`)
@@ -620,7 +617,7 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
       ourScore:      ourRbiTotal || null,
       opponentScore: opponentScoreTotal || null,
       inningScores: {
-        our:      Array.from({ length: innings }, (_, i) => ourInnings[i] ?? null),
+        our:      Array.from({ length: innings }, (_, i) => ourInningScores[i] ?? null),
         opponent: Array.from({ length: innings }, (_, i) => opponentInnings[i] ?? null),
       },
       note,
@@ -727,8 +724,8 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
                   key: 'our',
                   label: 'BLITZ',
                   color: '#60a5fa',
-                  innings: ourInnings,
-                  setInnings: setOurInnings,
+                  innings: ourInningScores,
+                  setInnings: null,                 // BLITZ はスコアブックから自動計算（読み取り専用）
                   total: ourScoreTotal,
                 }
                 const oppRow = {
@@ -745,16 +742,23 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
                     <td className="text-right pr-2 font-medium" style={{ color: row.color }}>{row.label}</td>
                     {Array.from({ length: innings }, (_, i) => (
                       <td key={i + 1} className="py-0.5 px-0.5">
-                        <input
-                          type="number" min={0} max={9}
-                          value={row.innings[i] ?? ''}
-                          onChange={e => {
-                            const v = e.target.value === '' ? null : parseInt(e.target.value)
-                            row.setInnings(prev => { const a = [...prev]; a[i] = v; return a })
-                          }}
-                          className="w-full text-center text-sm py-1 px-1 min-w-[60px]"
-                          style={{ color: row.color }}
-                        />
+                        {row.setInnings ? (
+                          <input
+                            type="number" min={0} max={9}
+                            value={row.innings[i] ?? ''}
+                            onChange={e => {
+                              const v = e.target.value === '' ? null : parseInt(e.target.value)
+                              row.setInnings!(prev => { const a = [...prev]; a[i] = v; return a })
+                            }}
+                            className="w-full text-center text-sm py-1 px-1 min-w-[60px]"
+                            style={{ color: row.color }}
+                          />
+                        ) : (
+                          <div className="w-full text-center text-sm py-1 px-1 min-w-[60px]"
+                            style={{ color: row.color }}>
+                            {row.innings[i] ?? '─'}
+                          </div>
+                        )}
                       </td>
                     ))}
                     <td className="text-center font-bold px-2"
