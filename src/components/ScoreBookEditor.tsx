@@ -391,10 +391,13 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
 
       // 読み取った全打点を合計して自動入力
       let totalRbi = 0
+      console.log('[OCR Debug] extraction.cells:', extraction.cells)
       for (const c of extraction.cells) {
+        console.log(`[OCR Debug] Cell Order:${c.order} Inning:${c.inning} ab1rbi:${c.ab1rbi} ab2rbi:${c.ab2rbi}`)
         if (c.ab1rbi) totalRbi += parseInt(c.ab1rbi)
         if (c.ab2rbi) totalRbi += parseInt(c.ab2rbi)
       }
+      console.log('[OCR Debug] Total RBI:', totalRbi)
       setOurScore(String(totalRbi))
 
       setOcrState('done')
