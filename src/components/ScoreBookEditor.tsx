@@ -367,6 +367,20 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
       }))
       addLog(`[STEP 7] 打者データ更新完了`)
 
+      // ── BLITZ のイニングスコアを読み取った打点から自動記入 ──
+      // 各イニングの打点合計を算出（打席のあったイニングは 0 も記入、無ければ空欄）
+      const inningRbi: (number | null)[] = Array(innings).fill(null)
+      for (const innMap of Object.values(batterCells)) {
+        for (const [innStr, code] of Object.entries(innMap)) {
+          const inn = parseInt(innStr)
+          if (inn < 1 || inn > innings || !code) continue
+          const rbi = calcBatterStats({ 0: code }).rbi
+          inningRbi[inn - 1] = (inningRbi[inn - 1] ?? 0) + rbi
+        }
+      }
+      setOurInnings(inningRbi)
+      addLog(`[STEP 7] イニングスコア自動記入: [${inningRbi.map(v => v ?? '-').join(',')}]`)
+
       const cellCount = Object.values(batterCells).reduce((n, r) => n + Object.keys(r).length, 0)
       addLog(`[STEP 8] 完了: ${cellCount}セル読み込み成功`)
 
