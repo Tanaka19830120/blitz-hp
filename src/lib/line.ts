@@ -5,6 +5,8 @@
  */
 
 import { prisma } from './prisma'
+import type { ScoreBookData } from './scorebook'
+import { calcBatterStats } from './scorebook'
 
 const LINE_PUSH_API = 'https://api.line.me/v2/bot/message/push'
 
@@ -273,17 +275,21 @@ export function buildLineupFromJson(
   return lines.filter(Boolean).join('\n')
 }
 
-/** 試合結果 */
+/** 試合結果（オプションで打者・投手成績も含む） */
 export function buildGameResult(
   schedule: { date: Date; opponent: string },
-  game: { ourScore: number; opponentScore: number; result: string; note?: string | null }
+  game: { ourScore: number; opponentScore: number; result: string; note?: string | null },
+  extras?: {
+    scorebook:   ScoreBookData
+    playerNames: Map<string, string>   // userId → name
+  }
 ): string {
   const emoji =
     game.result === 'WIN'  ? '🏆 勝利！' :
     game.result === 'LOSE' ? '😔 敗戦' :
                              '🤝 引き分け'
 
-  return [
+  const lines: (string | null)[] = [
     `⚾【BLITZ】試合結果`,
     `${fmt(schedule.date)} vs ${schedule.opponent}`,
     `━━━━━━━━━━━━`,
@@ -291,5 +297,56 @@ export function buildGameResult(
     ``,
     emoji,
     game.note ? `\n${game.note}` : null,
-  ].filter(Boolean).join('\n')
+  ]
+
+  if (extras) {
+    const { scorebook, playerNames } = extras
+
+    // ── 打者成績 ──
+    const hitters = scorebook.batters
+      .filter(b => b.userId && playerNames.has(b.userId))
+      .map(b => ({ name: playerNames.get(b.userId)!, order: b.order, stats: calcBatterStats(b.cells) }))
+      .filter(h => h.stats.pa > 0)
+
+    if (hitters.length > 0) {
+      lines.push(``)
+      lines.push(`━━━━━━━━━━━━`)
+      lines.push(`【打者成績】安打/打数`)
+      for (const h of hitters) {
+        let line = `${h.order}番 ${h.name}: ${h.stats.h}/${h.stats.ab}`
+        const pts: string[] = []
+        if (h.stats.rbi      > 0) pts.push(`${h.stats.rbi}打点`)
+        if (h.stats.homeRuns > 0) pts.push('HR')
+        if (h.stats.triples  > 0) pts.push('3塁打')
+        if (h.stats.doubles  > 0) pts.push('2塁打')
+        if (h.stats.sb       > 0) pts.push('盗塁')
+        if (h.stats.bb       > 0) pts.push(`${h.stats.bb}四球`)
+        if (pts.length > 0) line += ` (${pts.join('・')})`
+        lines.push(line)
+      }
+    }
+
+    // ── 投手成績 ──
+    const validPitchers = scorebook.pitchers
+      .filter(p => p.userId && playerNames.has(p.userId) && p.innings)
+
+    if (validPitchers.length > 0) {
+      lines.push(``)
+      lines.push(`━━━━━━━━━━━━`)
+      lines.push(`【投手成績】`)
+      for (const p of validPitchers) {
+        const name = playerNames.get(p.userId)!
+        let line = `${name}: ${p.innings}回 ${p.runs}失点`
+        if (p.earnedRuns != null && p.earnedRuns !== p.runs) line += `(${p.earnedRuns}自責)`
+        const pts: string[] = []
+        if (p.strikeouts) pts.push(`${p.strikeouts}K`)
+        if (p.walks)      pts.push(`${p.walks}BB`)
+        if (pts.length > 0) line += ` ${pts.join(' ')}`
+        if (p.decision)   line += ` [${p.decision}]`
+        lines.push(line)
+      }
+    }
+  }
+
+  return lines.filter(Boolean).join('\n')
 }

@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { sendToLineGroup, buildReminder, buildAttendanceSummary } from '@/lib/line'
 import { auth } from '@/auth'
+import { LineAdminButton } from '@/components/LineAdminButton'
 
 // ─── Server Actions ──────────────────────────
 
@@ -33,35 +34,48 @@ async function getGroupSchedules(scheduleId: string) {
   })
 }
 
-async function sendLineReminder(formData: FormData) {
+// ── リマインド プレビュー ──
+async function previewLineReminder(scheduleId: string): Promise<string> {
   'use server'
-  const scheduleId = String(formData.get('scheduleId'))
-  const [group, senderFooter] = await Promise.all([
-    getGroupSchedules(scheduleId),
-    getSenderFooter(),
-  ])
+  const [group, senderFooter] = await Promise.all([getGroupSchedules(scheduleId), getSenderFooter()])
+  if (!group.length) return '（日程が見つかりません）'
+  return buildReminder(group.length === 1 ? group[0] : group) + senderFooter
+}
+
+// ── リマインド 送信 ──
+async function sendLineReminder(scheduleId: string): Promise<void> {
+  'use server'
+  const [group, senderFooter] = await Promise.all([getGroupSchedules(scheduleId), getSenderFooter()])
   if (!group.length) return
   const msg = buildReminder(group.length === 1 ? group[0] : group) + senderFooter
   await sendToLineGroup(msg)
   revalidatePath('/admin')
 }
 
-async function sendLineAttendance(formData: FormData) {
+// ── 出欠集計 プレビュー ──
+async function previewLineAttendance(scheduleId: string): Promise<string> {
   'use server'
-  const scheduleId = String(formData.get('scheduleId'))
-  const [group, senderFooter] = await Promise.all([
-    getGroupSchedules(scheduleId),
-    getSenderFooter(),
-  ])
-  if (!group.length) return
+  const [group, senderFooter] = await Promise.all([getGroupSchedules(scheduleId), getSenderFooter()])
+  if (!group.length) return '（日程が見つかりません）'
+  const primary = await prisma.schedule.findUnique({
+    where: { id: group[0].id },
+    include: { attendances: { include: { user: { select: { name: true } } } } },
+  })
+  if (!primary) return '（データなし）'
+  const scheduleArg = group.length === 1 ? group[0] : group
+  return buildAttendanceSummary(scheduleArg, primary.attendances) + senderFooter
+}
 
-  // 出欠は primary (group[0]) のものを使用（グループ内は共通）
+// ── 出欠集計 送信 ──
+async function sendLineAttendance(scheduleId: string): Promise<void> {
+  'use server'
+  const [group, senderFooter] = await Promise.all([getGroupSchedules(scheduleId), getSenderFooter()])
+  if (!group.length) return
   const primary = await prisma.schedule.findUnique({
     where:   { id: group[0].id },
     include: { attendances: { include: { user: { select: { name: true } } } } },
   })
   if (!primary) return
-
   const scheduleArg = group.length === 1 ? group[0] : group
   const msg = buildAttendanceSummary(scheduleArg, primary.attendances) + senderFooter
   await sendToLineGroup(msg)
@@ -262,27 +276,21 @@ export default async function AdminPage() {
                       </Link>
                     )}
 
-                    {/* LINE送信ボタン */}
+                    {/* LINE送信ボタン（確認モーダル付き） */}
                     {lineConfigured && (
                       <>
-                        <form action={sendLineReminder}>
-                          <input type="hidden" name="scheduleId" value={primary.id} />
-                          <button
-                            type="submit"
-                            className="text-xs px-3 py-1 rounded-lg border border-[#22c55e]/40 text-[#22c55e] hover:bg-[#22c55e]/10 transition-all"
-                          >
-                            📣 出欠リマインド
-                          </button>
-                        </form>
-                        <form action={sendLineAttendance}>
-                          <input type="hidden" name="scheduleId" value={primary.id} />
-                          <button
-                            type="submit"
-                            className="text-xs px-3 py-1 rounded-lg border border-[#60a5fa]/40 text-[#60a5fa] hover:bg-[#60a5fa]/10 transition-all"
-                          >
-                            📋 出欠表送信
-                          </button>
-                        </form>
+                        <LineAdminButton
+                          label="📣 出欠リマインド"
+                          buttonClass="text-xs px-3 py-1 rounded-lg border border-[#22c55e]/40 text-[#22c55e] hover:bg-[#22c55e]/10 transition-all disabled:opacity-40"
+                          previewAction={previewLineReminder.bind(null, primary.id)}
+                          sendAction={sendLineReminder.bind(null, primary.id)}
+                        />
+                        <LineAdminButton
+                          label="📋 出欠表送信"
+                          buttonClass="text-xs px-3 py-1 rounded-lg border border-[#60a5fa]/40 text-[#60a5fa] hover:bg-[#60a5fa]/10 transition-all disabled:opacity-40"
+                          previewAction={previewLineAttendance.bind(null, primary.id)}
+                          sendAction={sendLineAttendance.bind(null, primary.id)}
+                        />
                       </>
                     )}
                   </div>

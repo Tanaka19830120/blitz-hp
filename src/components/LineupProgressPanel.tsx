@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
+import { LineConfirmModal } from './LineConfirmModal'
 
 export interface LineupGameStep {
   scheduleId: string
@@ -18,16 +19,18 @@ interface Props {
   lineConfigured: boolean
   senderLabel:    string
   sendAction:     (primaryId: string) => Promise<void>
+  previewTexts?:  string[]   // LINE 送信前プレビュー用
 }
 
 export function LineupProgressPanel({
-  games, primaryId, lineSentAt, lineConfigured, senderLabel, sendAction,
+  games, primaryId, lineSentAt, lineConfigured, senderLabel, sendAction, previewTexts = [],
 }: Props) {
   const allSaved = games.every(g => g.saved)
   const [isPending, startTransition] = useTransition()
   const [status, setStatus] = useState<'idle' | 'sent' | 'error'>('idle')
+  const [showModal, setShowModal] = useState(false)
 
-  function handleSend() {
+  function executeSend() {
     startTransition(async () => {
       try {
         await sendAction(primaryId)
@@ -38,6 +41,19 @@ export function LineupProgressPanel({
         setTimeout(() => setStatus('idle'), 4000)
       }
     })
+  }
+
+  function handleSend() {
+    if (previewTexts.length > 0) {
+      setShowModal(true)
+    } else {
+      executeSend()
+    }
+  }
+
+  function handleModalConfirm() {
+    setShowModal(false)
+    executeSend()
   }
 
   // ── ステップ定義（ゲーム + LINE送信） ──
@@ -59,6 +75,16 @@ export function LineupProgressPanel({
   ]
 
   return (
+    <>
+      <LineConfirmModal
+        isOpen={showModal}
+        title={`スタメンをLINEに送信${games.length > 1 ? `（${games.length}試合）` : ''}`}
+        preview={previewTexts.join('\n\n──────────────\n\n')}
+        onConfirm={handleModalConfirm}
+        onCancel={() => setShowModal(false)}
+        isPending={isPending}
+      />
+
     <div className="glass-card rounded-2xl p-4 mb-5">
       <p className="text-[10px] font-bold text-[#64748b] tracking-widest uppercase mb-3">進捗</p>
 
@@ -166,5 +192,6 @@ export function LineupProgressPanel({
         </div>
       )}
     </div>
+    </>
   )
 }

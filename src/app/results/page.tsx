@@ -132,8 +132,8 @@ export default async function ResultsPage({
             return (
               <div key={game.id} className="glass-card rounded-2xl p-6 hover:border-[#2563eb]/40 transition-all">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-4">
-                    <div className="text-center min-w-[80px]">
+                  <div className="flex items-start gap-4">
+                    <div className="text-center shrink-0 pt-0.5">
                       <span
                         className={
                           game.result === 'WIN'
@@ -147,7 +147,7 @@ export default async function ResultsPage({
                       </span>
                     </div>
 
-                    <div>
+                    <div className="min-w-0">
                       <div className="text-xs text-[#64748b] mb-1">{formatDate(game.schedule.date)}</div>
                       <div className="font-semibold text-[#e2e8f0]">
                         vs {game.schedule.opponent}
@@ -156,7 +156,7 @@ export default async function ResultsPage({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-6">
+                  <div className="flex items-center justify-between sm:justify-end gap-4 sm:gap-6">
                     <div className="text-3xl font-black tracking-tight">
                       <span
                         className={

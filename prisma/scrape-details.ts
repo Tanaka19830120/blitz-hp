@@ -89,6 +89,11 @@ function toInt(s: string | undefined | null): number {
   return isNaN(n) ? 0 : n
 }
 
+/** 名前を正規化（全角スペース・前後空白を除去、小文字化） */
+function normName(n: string): string {
+  return n.trim().replace(/\s+/g, '').replace(/　/g, '').toLowerCase()
+}
+
 /** HTML テーブルから各行のテキストセルを取得 */
 function tableRows(html: string, headerKeyword: string): string[][] {
   const root = parseHTML(html)
@@ -112,7 +117,6 @@ function tableRows(html: string, headerKeyword: string): string[][] {
 
 /** タイトルから日付と対戦相手を抽出 */
 function parseTitleInfo(html: string): { date: string; opponent: string } | null {
-  // title: "2026/5/17 BLITZVS佐土｜teams" or "2026/5/17 BLITZ VS 佐土｜teams"
   const m = html.match(/<title>\s*(\d{4})\/(\d+)\/(\d+)\s*BLITZ\s*VS\s*(.+?)(?:｜|[|])/i)
   if (!m) return null
   const [, y, mon, d, opp] = m
@@ -120,40 +124,54 @@ function parseTitleInfo(html: string): { date: string; opponent: string } | null
   return { date, opponent: opp.trim() }
 }
 
-/** イニングスコアを抽出（ページ内の最初のテーブル = スコアボード） */
+/** イニングスコアを抽出
+ *  - 優先: myteam クラスで BLITZ 行を特定（teams.one の信頼できる識別子）
+ *  - フォールバック: チーム名テキストで判定
+ */
 function parseInningScores(html: string): { blitz: (number|null)[]; opponent: (number|null)[] } | null {
   const root = parseHTML(html)
   const tables = root.querySelectorAll('table')
-  // 最初のテーブルがスコアテーブル
   const table = tables[0]
   if (!table) return null
 
-  const rows = table.querySelectorAll('tr')
-  const dataRows = Array.from(rows).filter(r => r.querySelectorAll('td').length > 2)
+  const allRows = table.querySelectorAll('tr')
+  const dataRows = Array.from(allRows).filter(r => r.querySelectorAll('td').length > 2)
   if (dataRows.length < 2) return null
 
-  const parseRow = (tr: typeof dataRows[number]): { name: string; scores: (number | null)[] } => {
+  const parseScores = (tr: typeof dataRows[number]): (number | null)[] => {
     const cells = tr.querySelectorAll('td')
-    const name = cells[0]?.text.trim() ?? ''
-    // 2列目以降 (最後の合計列を除外)
-    const scoreCells = Array.from(cells).slice(1, -1)
-    const scores = scoreCells.map(c => {
+    // 1列目=チーム名、最後の列=合計 → 除外
+    return Array.from(cells).slice(1, -1).map(c => {
       const t = c.text.trim()
       return (t === '-' || t === '' || t === 'x') ? null : toInt(t)
     })
-    return { name, scores }
   }
 
-  const row0 = parseRow(dataRows[0])
-  const row1 = parseRow(dataRows[1])
+  // ① myteam クラスで BLITZ を特定（最も信頼性が高い）
+  const blitzRow = dataRows.find(r =>
+    r.classNames?.includes('myteam') || r.getAttribute('class')?.includes('myteam')
+  )
+  if (blitzRow) {
+    const opponentRow = dataRows.find(r => r !== blitzRow)
+    if (opponentRow) {
+      return { blitz: parseScores(blitzRow), opponent: parseScores(opponentRow) }
+    }
+  }
 
-  const isBlitz0 = row0.name.toUpperCase().includes('BLITZ')
-  const blitz: (number | null)[]    = (isBlitz0 ? row0 : row1).scores
-  const opponent: (number | null)[] = (isBlitz0 ? row1 : row0).scores
-  return { blitz, opponent }
+  // ② フォールバック: チーム名テキストで判定
+  const name0 = dataRows[0].querySelectorAll('td')[0]?.text.trim() ?? ''
+  const name1 = dataRows[1].querySelectorAll('td')[0]?.text.trim() ?? ''
+  const isBlitz0 = name0.toUpperCase().includes('BLITZ')
+  const isBlitz1 = name1.toUpperCase().includes('BLITZ')
+
+  if (isBlitz0) return { blitz: parseScores(dataRows[0]), opponent: parseScores(dataRows[1]) }
+  if (isBlitz1) return { blitz: parseScores(dataRows[1]), opponent: parseScores(dataRows[0]) }
+
+  // ③ 判定不能: 先攻=相手、後攻=BLITZ と仮定（多くの試合で後攻のため）
+  return { blitz: parseScores(dataRows[1]), opponent: parseScores(dataRows[0]) }
 }
 
-/** 投手成績テーブルを抽出: 各投手の成績オブジェクト配列 */
+/** 投手成績テーブルを抽出 */
 function parsePitchingStats(html: string) {
   const rows = tableRows(html, '投球回')
   if (rows.length === 0) return []
@@ -172,7 +190,7 @@ function parsePitchingStats(html: string) {
   }))
 }
 
-/** 打者成績テーブルを抽出: 各選手の成績オブジェクト配列 */
+/** 打者成績テーブルを抽出 */
 function parseBattingStats(html: string) {
   const rows = tableRows(html, '打席')
   if (rows.length === 0) return []
@@ -202,40 +220,68 @@ function parseBattingStats(html: string) {
 async function main() {
   console.log('=== teams.one 詳細スクレーパー ===')
 
-  // DB から全 Game + Schedule を取得（日付 ASC）
   const allGames = await prisma.game.findMany({
     include: { schedule: true },
     orderBy: { schedule: { date: 'asc' } },
   })
   console.log(`DB内の試合数: ${allGames.length}`)
 
-  // 全ユーザー取得（名前→ID マップ）
+  // 全ユーザー取得 → 複数の検索キーでマップを構築
   const users = await prisma.user.findMany()
+
+  // 名前 → userId（正規化済みキーで登録）
   const nameToUserId: Record<string, string> = {}
+  // 背番号 → userId
+  const numberToUserId: Record<number, string> = {}
+
   for (const u of users) {
-    nameToUserId[u.name] = u.id
-    // 部分一致用のバリエーションも登録
+    // 正規化名（空白除去・小文字）
+    nameToUserId[normName(u.name)]  = u.id
+    // 元の名前もそのまま登録
+    nameToUserId[u.name.trim()]     = u.id
+    // ピリオドなし
     if (u.name.includes('.')) {
-      nameToUserId[u.name.replace('.', '')] = u.id
+      nameToUserId[u.name.replace(/\./g, '').trim()] = u.id
+    }
+    // 背番号
+    if (u.number != null) {
+      numberToUserId[u.number] = u.id
     }
   }
 
-  // 日付+対戦相手 → Game のマップ（マッチング用）
+  /** teams.one の打者行から DB の userId を解決する
+   *  1. 背番号（整数）→ 最も確実
+   *  2. 正規化名 → 空白・大小文字の違いを吸収
+   *  3. 元の名前（そのまま）
+   */
+  function resolveUserId(name: string, jerseyNumber: string): string | undefined {
+    // 1. 背番号（"-" や空白はスキップ）
+    const num = parseInt(jerseyNumber, 10)
+    if (!isNaN(num) && num > 0) {
+      const byNum = numberToUserId[num]
+      if (byNum) return byNum
+    }
+    // 2. 正規化名
+    const byNorm = nameToUserId[normName(name)]
+    if (byNorm) return byNorm
+    // 3. そのまま
+    return nameToUserId[name.trim()]
+  }
+
+  // 日付+対戦相手 → Game マップ
   const gameLookup = new Map<string, typeof allGames[number]>()
   for (const g of allGames) {
     const key = `${g.schedule.date.toISOString().slice(0, 10)}_${g.schedule.opponent}`
     gameLookup.set(key, g)
   }
 
-  // teams.one ゲームIDを処理（新しい順）
   let success = 0, skipped = 0, failed = 0
 
   for (let i = 0; i < GAME_IDS.length; i++) {
     const teamsOneId = GAME_IDS[i]
 
-    // 既にスクレーピング済み かつ 投手成績も存在 → スキップ
     const existing = await prisma.game.findFirst({
-      where: { teamsOneId: String(teamsOneId) },
+      where:   { teamsOneId: String(teamsOneId) },
       include: { schedule: true },
     })
     if (existing) {
@@ -245,7 +291,6 @@ async function main() {
         skipped++
         continue
       }
-      // teamsOneId は設定済みだが投手成績がない → 投手成績のみ追加
     }
 
     try {
@@ -256,23 +301,25 @@ async function main() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const html = await res.text()
 
-      // タイトルから日付・相手を抽出
-      const titleInfo = parseTitleInfo(html)
-      const gameDate = titleInfo?.date ?? ''
+      const titleInfo   = parseTitleInfo(html)
+      const gameDate    = titleInfo?.date ?? ''
       const opponentName = titleInfo?.opponent ?? ''
+
+      // 会場
+      const placeMatch = html.match(/<p class="place">\s*([\s\S]*?)\s*<\/p>/)
+      const place = placeMatch ? placeMatch[1].replace(/<[^>]+>/g, '').trim().replace(/\s+/g, ' ') : null
 
       // イニングスコア
       const inningData = parseInningScores(html)
 
-      // 打者成績・投手成績
-      const batting = parseBattingStats(html)
+      // 打者・投手成績
+      const batting  = parseBattingStats(html)
       const pitching = parsePitchingStats(html)
 
-      // DB の試合を検索（existing がある場合はそのまま使う）
+      // DB の試合を検索
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let dbGame: typeof allGames[number] | undefined = (existing as any) ?? gameLookup.get(`${gameDate}_${opponentName}`)
 
-      // マッチしない場合、日付のみで候補を絞ってteamsOneIdが未設定のものを取得
       if (!dbGame && gameDate) {
         const candidates = allGames.filter(g => {
           const gDate = g.schedule.date.toISOString().slice(0, 10)
@@ -290,79 +337,98 @@ async function main() {
         continue
       }
 
-      // Game を更新（teamsOneId + inningScores）
       const inningJson = inningData ? JSON.stringify(inningData) : null
       await prisma.game.update({
         where: { id: dbGame.id },
         data: {
-          teamsOneId: String(teamsOneId),
+          teamsOneId:   String(teamsOneId),
           inningScores: inningJson,
         },
       })
+      if (place) {
+        await prisma.schedule.update({
+          where: { id: dbGame.schedule.id },
+          data:  { location: place },
+        })
+      }
 
-      // GameStat を挿入
+      // GameStat 挿入
       let statCount = 0
+      const unmatchedBatters: string[] = []
+
       for (const stat of batting) {
-        const userId = nameToUserId[stat.name]
-        if (!userId) continue // 未登録選手はスキップ
+        const userId = resolveUserId(stat.name, stat.number)
+        if (!userId) {
+          if (stat.name) unmatchedBatters.push(`"${stat.name}"(${stat.number})`)
+          continue
+        }
 
         try {
           await prisma.gameStat.upsert({
-            where: { userId_gameId: { userId, gameId: dbGame.id } },
+            where:  { userId_gameId: { userId, gameId: dbGame.id } },
             create: {
               userId,
-              gameId: dbGame.id,
+              gameId:          dbGame.id,
               battingOrder:    stat.battingOrder || null,
               position:        stat.position || null,
               plateAppearances:stat.plateAppearances,
               atBats:          stat.atBats,
-              hits:             stat.hits,
-              doubles:          stat.doubles,
-              triples:          stat.triples,
-              homeRuns:         stat.homeRuns,
-              rbi:              stat.rbi,
-              runs:             stat.runs,
-              stolenBases:      stat.stolenBases,
-              strikeouts:       stat.strikeouts,
-              walks:            stat.walks,
-              hitByPitch:       stat.hitByPitch,
-              sacrificeBunts:   stat.sacrificeBunts,
-              sacrificeFlies:   stat.sacrificeFlies,
+              hits:            stat.hits,
+              doubles:         stat.doubles,
+              triples:         stat.triples,
+              homeRuns:        stat.homeRuns,
+              rbi:             stat.rbi,
+              runs:            stat.runs,
+              stolenBases:     stat.stolenBases,
+              strikeouts:      stat.strikeouts,
+              walks:           stat.walks,
+              hitByPitch:      stat.hitByPitch,
+              sacrificeBunts:  stat.sacrificeBunts,
+              sacrificeFlies:  stat.sacrificeFlies,
             },
             update: {
               battingOrder:    stat.battingOrder || null,
               position:        stat.position || null,
               plateAppearances:stat.plateAppearances,
               atBats:          stat.atBats,
-              hits:             stat.hits,
-              doubles:          stat.doubles,
-              triples:          stat.triples,
-              homeRuns:         stat.homeRuns,
-              rbi:              stat.rbi,
-              runs:             stat.runs,
-              stolenBases:      stat.stolenBases,
-              strikeouts:       stat.strikeouts,
-              walks:            stat.walks,
-              hitByPitch:       stat.hitByPitch,
-              sacrificeBunts:   stat.sacrificeBunts,
-              sacrificeFlies:   stat.sacrificeFlies,
+              hits:            stat.hits,
+              doubles:         stat.doubles,
+              triples:         stat.triples,
+              homeRuns:        stat.homeRuns,
+              rbi:             stat.rbi,
+              runs:            stat.runs,
+              stolenBases:     stat.stolenBases,
+              strikeouts:      stat.strikeouts,
+              walks:           stat.walks,
+              hitByPitch:      stat.hitByPitch,
+              sacrificeBunts:  stat.sacrificeBunts,
+              sacrificeFlies:  stat.sacrificeFlies,
             },
           })
           statCount++
         } catch (_) {
-          // 重複などは無視
+          // unique 制約など
         }
       }
 
-      // PitchingStat を挿入
+      if (unmatchedBatters.length > 0) {
+        console.log(`\n  [未マッチ打者] ${teamsOneId}: ${unmatchedBatters.join(', ')}`)
+      }
+
+      // PitchingStat 挿入
       let pitchCount = 0
+      const unmatchedPitchers: string[] = []
+
       for (const p of pitching) {
-        const userId = nameToUserId[p.name]
-        if (!userId) continue
+        const userId = resolveUserId(p.name, p.number)
+        if (!userId) {
+          if (p.name) unmatchedPitchers.push(`"${p.name}"(${p.number})`)
+          continue
+        }
 
         try {
           await prisma.pitchingStat.upsert({
-            where: { userId_gameId: { userId, gameId: dbGame.id } },
+            where:  { userId_gameId: { userId, gameId: dbGame.id } },
             create: {
               userId,
               gameId:      dbGame.id,
@@ -388,8 +454,12 @@ async function main() {
           })
           pitchCount++
         } catch (_) {
-          // 重複などは無視
+          // unique 制約など
         }
+      }
+
+      if (unmatchedPitchers.length > 0) {
+        console.log(`\n  [未マッチ投手] ${teamsOneId}: ${unmatchedPitchers.join(', ')}`)
       }
 
       console.log(`[OK] ${teamsOneId} | ${gameDate} vs ${opponentName} | stats:${statCount} pitch:${pitchCount}`)
@@ -399,7 +469,6 @@ async function main() {
       failed++
     }
 
-    // レート制限対策: 500ms 待機
     await sleep(500)
   }
 

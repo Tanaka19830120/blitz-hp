@@ -150,13 +150,17 @@ export default async function SchedulePage() {
                     {isMulti ? (
                       <div className="flex flex-col gap-2 mb-2">
                         {group.map((s, i) => (
-                          <div key={s.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-                            <span className="text-xs text-[#64748b] shrink-0">第{i + 1}試合</span>
-                            <span className="text-lg font-bold">
-                              vs <span className="text-[#fbbf24]">{s.opponent}</span>
-                            </span>
-                            <span className="text-xs text-[#64748b]">📍 {s.location}</span>
-                            {s.startTime && <span className="text-xs text-[#64748b]">▶ {s.startTime}</span>}
+                          <div key={s.id} className="flex flex-col gap-0.5">
+                            <div className="flex flex-wrap items-center gap-x-2">
+                              <span className="text-xs text-[#64748b] shrink-0">第{i + 1}試合</span>
+                              <span className="text-lg font-bold leading-tight">
+                                vs <span className="text-[#fbbf24]">{s.opponent}</span>
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap gap-x-3 text-xs text-[#64748b]">
+                              <span>📍 {s.location}</span>
+                              {s.startTime && <span>▶ {s.startTime}</span>}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -220,7 +224,7 @@ export default async function SchedulePage() {
                 </div>
 
                 {/* 出欠集計 */}
-                <div className="mt-4 pt-4 border-t border-[#1e3a5f]/30 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                <div className="mt-4 pt-4 border-t border-[#1e3a5f]/30 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                   <div>
                     <span className="text-[#22c55e] font-bold">✓ 参加 {attending.length}名</span>
                     {attending.length > 0 && (

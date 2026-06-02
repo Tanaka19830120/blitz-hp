@@ -4,23 +4,44 @@ import { auth } from '@/auth'
 /**
  * ocr-scorebook API route
  *
- * 【新アーキテクチャ】
- * クライアント側で 4隅マーカー検出 + ホモグラフィー補正 + セル切り出しを行い、
- * このエンドポイントには切り出し済みのセル画像（base64）が届く。
+ * 【アーキテクチャ】
+ * クライアント側でセル切り出し（四隅マーカー + バイリニア補間）を行い、
+ * このエンドポイントには4象限に分割済みのサブ画像が届く。
  *
  * FormData:
- *   cells   : JSON string  →  { "1": { "1": "data:image/jpeg;base64,...", "2": "..." }, ... }
- *             打順(1-9) × イニング(1-N) の切り出しセル画像
- *   image   : File         →  元画像（スコア読み取り用）
- *   innings : string       →  イニング数
+ *   image   : File   — 元画像（イニングスコア読み取り用）
+ *   innings : string — イニング数
+ *   cells   : JSON   — 打順 × イニング × サブ画像
+ *             { "1": { "1": { ab1, rbi1, ab2, rbi2 }, ... }, ... }
  *
  * 【処理フロー】
- *   1. スコア読み取り (元画像 × 1コール)
- *   2. 打者セル読み取り (打順3行ずつ × 3並列コール)
- *      各コールには切り出しセル画像を渡す → AI は「この小さい画像に何が書いてあるか」だけ答えればよい
+ *   AI の役割: サブ画像1枚に書かれた「1文字の OCR」のみ
+ *   コードの役割: OCR 結果から打撃コード文字列を組み立てる（ルールベース）
+ *
+ *   1. イニングスコア読み取り（元画像 × 1コール）
+ *   2. 打者セル OCR（打順3行ずつ × 3並列コール）
+ *      各コールには4象限サブ画像を渡す
+ *   3. ルールベース組み立て: {ab1, rbi1, ab2, rbi2} → "O" / "11" / "1s,O" 等
  */
 
-// ── 型定義 ──────────────────────────────────────────────────────
+// ── 型定義 ─────────────────────────────────────────────────────────
+
+interface CellSubData {
+  ab1:  string        // dataUrl
+  rbi1: string        // dataUrl
+  ab2:  string | null // dataUrl or null
+  rbi2: string | null // dataUrl or null
+  preAb1?: string     // クライアント形状分類: 'O'|'1'|'SKIP' (Claudeより優先)
+  preAb2?: string
+}
+
+// OCR 結果: イニング → {ab1, rbi1, ab2, rbi2} の文字
+interface OcrCellResult {
+  ab1:  string | null
+  rbi1: string | null
+  ab2:  string | null
+  rbi2: string | null
+}
 
 interface OcrResult {
   ourScore:      number | null
@@ -32,12 +53,12 @@ interface OcrResult {
   batterCells: Record<string, Record<string, string>>
 }
 
-// ── Anthropic Vision 呼び出しヘルパー ───────────────────────────
+// ── Anthropic Vision 呼び出しヘルパー ──────────────────────────────
 
 async function callVision(
   apiKey:    string,
   model:     string,
-  content:   object[],   // Anthropic messages content array
+  content:   object[],
   maxTokens: number,
 ): Promise<string> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -69,9 +90,9 @@ async function callVision(
   return data.content?.[0]?.text ?? ''
 }
 
-// ── プロンプト生成 ───────────────────────────────────────────────
+// ── プロンプト生成 ──────────────────────────────────────────────────
 
-/** スコア読み取り用プロンプト（元画像全体を使う） */
+/** イニングスコア読み取り用（元画像全体） */
 function makeScoreContent(
   imageBase64: string,
   mimeType:    string,
@@ -101,95 +122,175 @@ inningScoresは${innings}要素（読み取れない回はnull）。合計点は
 }
 
 /**
- * 打者行のセル読み取り用コンテント配列を生成
- * 各セル画像を渡し、AIは「どのセルに何が書いてあるか」だけ答える
+ * 打者セル OCR 用コンテント配列を生成。
+ *
+ * AIへの指示: 各サブ画像に書かれた「1文字」を読むだけ。
+ * 意味解釈（コード組み立て）はしない。
+ *
+ * 画像の並び順:
+ *   イニングごとに [ab1, rbi1] （2打席目があれば [ab1, rbi1, ab2, rbi2]）
+ *
+ * 期待する返答: { "1": {"ab1":"O","rbi1":null,"ab2":null,"rbi2":null}, ... }
+ */
+/**
+ * 打者セル OCR 用コンテント配列を生成 (interleaved 形式)。
+ *
+ * 各画像の直前にラベルテキストを挿入することで
+ * 「どの画像がどのイニングの何の欄か」をAIが絶対に間違えないようにする。
+ *
+ * 構造:
+ *   [text: ルール説明]
+ *   [text: "=== 1回 === 上段コード欄:"] [image: ab1]
+ *   [text: "上段打点欄:"] [image: rbi1]
+ *   ([text: "下段コード欄(2打席目):"] [image: ab2]  ← 下段に記入あり時のみ)
+ *   ([text: "下段打点欄(2打席目):"] [image: rbi2])
+ *   [text: "=== 2回 === ..."]
+ *   ...
+ *   [text: JSONのみ返してください: {...}]
  */
 function makeCellsContent(
-  order:      number,
-  cellImages: Record<string, string>,  // inning → dataUrl
-  innings:    number,
+  order:    number,
+  cellData: Record<string, CellSubData>,
 ): object[] {
-  const sortedInnings = Object.keys(cellImages)
-    .map(Number)
-    .sort((a, b) => a - b)
-
+  const sortedInnings = Object.keys(cellData).map(Number).sort((a, b) => a - b)
   if (sortedInnings.length === 0) return []
+
+  const toB64 = (url: string) => url.replace(/^data:image\/[a-z]+;base64,/, '')
+  const img   = (url: string): object => ({
+    type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: toB64(url) },
+  })
 
   const content: object[] = []
 
-  // 各セル画像をコンテントに追加
-  for (const inn of sortedInnings) {
-    const dataUrl = cellImages[String(inn)]
-    // "data:image/jpeg;base64,xxxxx" → base64部分だけ抽出
-    const base64  = dataUrl.replace(/^data:image\/[a-z]+;base64,/, '')
-    content.push({
-      type:   'image',
-      source: { type: 'base64', media_type: 'image/jpeg', data: base64 },
-    })
-  }
-
-  // テキスト指示
-  const innList = sortedInnings.join('、')
+  // ── ルール説明 (冒頭1回だけ) ──────────────────────────────────
   content.push({
     type: 'text',
-    text: `上の画像は打順${order}の各イニングセル画像です（左から${innList}回の順番、計${sortedInnings.length}枚）。
+    text: `打順${order}のスコアブックセル画像を読んでください。
 
-【★セル構造★】
-各セル画像は縦線で左右に分かれています：
-  - 左側（広い部分）= 打撃コード（O/1/2/3/4/B/D/S/X）
-  - 右側（狭い部分）= 打点の数字（0〜9、無ければ空白）
-合わせて1つのコードです。例：左「2」＋右「1」→「21」（二塁打打点1）
+【重要】空欄判定の基準:
+・黒い塗りつぶし円や明確な文字がある → 文字を返す
+・完全に白い、薄いグレー背景のみ、かすかな枠線だけ → null
+・少しでも迷ったら null を返す（空欄の誤認識を防ぐため）
 
-【★絶対ルール★】
-- 1枚の画像 = 1イニング分（1コード）
-- 「21」「11」「43」は2イニングではなく「打撃コード＋打点」の1コード
-- 画像枚数を超えるキーは返さない（${sortedInnings.length}枚 = ${sortedInnings.length}イニング分のみ）
+【コード欄 (ab1/ab2)】存在しうる文字: O 1 2 3 4 B D S X のみ
+・黒く塗られた丸→「O」 ・縦線・「/」→「1」 ・「8」→「B」 ・「5」→「S」
+・盗塁は末尾s (1s, Os 等)
+・「0」(数字ゼロ)は存在しない。必ず「O」(大文字オー)
 
-【コード一覧】
-O=アウト（大文字のO・英字）  1=単打  2=二塁打  3=三塁打  4=本塁打
-B=四球    D=死球  S=犠打    X=犠飛
-打点=コード直後の数字（例: "11"=単打打点1, "43"=本塁打打点3）
-盗塁=コード末尾に小文字s（例: "1s"=単打盗塁, "11s"=単打打点1盗塁）
-2打席目以降=カンマで結合（例: "O,1"=1打席目アウト・2打席目単打）
+【打点欄 (rbi1/rbi2)】数字1〜9またはnull のみ
+・「/」「|」→「1」
 
-【★重要★】アウトは必ず大文字の「O」（英字オー）。数字の「0」（ゼロ）は使わない。
+注意: 打点欄(右)に記号があっても、それは打点(rbi)であり2打席目(ab2)ではない
+`,
+  })
 
-【返答形式】JSONのみ（説明不要）:
-{${sortedInnings.map(n => `"${n}": "コード"`).join(', ')}}
+  // ── イニングごとに画像を挿入 ─────────────────────────────────
+  for (const inn of sortedInnings) {
+    const cell   = cellData[String(inn)]
+    const hasAb2 = !!cell.ab2
 
-- キーは必ずイニング番号（${sortedInnings.map(n => `"${n}"`).join('/')}）のみ
-- 空白・読み取れないセルはキー省略
-- イニング番号の最大値: ${innings}`,
+    content.push({ type: 'text', text: `\n=== ${inn}回 ===\nコード欄(ab1): 黒い塗りつぶしや文字がありますか？空欄ならnull:` })
+    content.push(img(cell.ab1))
+    content.push({ type: 'text', text: '打点欄(rbi1): 数字が書かれていますか？空欄ならnull:' })
+    content.push(img(cell.rbi1))
+
+    if (hasAb2 && cell.ab2 && cell.rbi2) {
+      content.push({ type: 'text', text: 'コード欄(ab2): 黒い塗りつぶしや文字がありますか？空欄ならnull:' })
+      content.push(img(cell.ab2))
+      content.push({ type: 'text', text: '打点欄(rbi2): 数字が書かれていますか？空欄ならnull:' })
+      content.push(img(cell.rbi2))
+    }
+  }
+
+  // ── 期待するJSONキー構造 ─────────────────────────────────────
+  const expectedKeys = sortedInnings.map(inn => {
+    const cell = cellData[String(inn)]
+    const keys = cell.ab2
+      ? `"ab1":null,"rbi1":null,"ab2":null,"rbi2":null`
+      : `"ab1":null,"rbi1":null`
+    return `"${inn}":{${keys}}`
+  }).join(', ')
+
+  content.push({
+    type: 'text',
+    text: `\nJSONのみ返してください:\n{${expectedKeys}}`,
   })
 
   return content
 }
 
-// ── レスポンス正規化 ─────────────────────────────────────────────
+// ── ルールベース組み立て ───────────────────────────────────────────
 
-function normalizeCode(raw: unknown): string {
-  if (typeof raw !== 'string') return ''
-  return raw.split(/[,、]/).map(part => {
-    const p = part.trim().replace(/\s+/g, '')
-    if (!p || p === '?') return p
-    const upper = p.toUpperCase()
-    // 例: "11S", "1S1", "O", "B", "43" → 正規化
-    const m = upper.match(/^([KGFO1234BDSX])(S?)([0-9]?)(S?)$/)
-    if (!m) return p
-    const base  = m[1]
-    const hasSb = m[2] === 'S' || m[4] === 'S'
-    const rbi   = m[3] || ''
-    return base + rbi + (hasSb ? 's' : '')
-  }).filter(Boolean).join(',')
+/**
+ * 1打席分の OCR 結果 → 打撃コード文字列
+ * code: O/1/2/3/4/B/D/S/X + 末尾 s（盗塁）
+ * rbi:  1-9 の数字
+ * 例: code="1", rbi="1" → "11"
+ *     code="1s", rbi=""  → "1s"
+ *     code="1s", rbi="1" → "11s"
+ */
+function buildAtBat(
+  code: string | null | undefined,
+  rbi:  string | null | undefined,
+): string {
+  if (!code || code === 'null') return ''
+  const raw = String(code).trim()
+  if (!raw) return ''
+
+  // 末尾の s は盗塁フラグ（'S' 単体は犠打）
+  const hasSb = raw.length > 1 && raw.at(-1)?.toLowerCase() === 's'
+  const baseRaw = hasSb ? raw.slice(0, -1) : raw
+  let base = baseRaw.toUpperCase()
+
+  // ★ '0'（数字ゼロ）→ 'O'（アルファベット）の正規化
+  //    手書きの「O」をAIが数字の「0」と読むケースを救済
+  if (base === '0') base = 'O'
+
+  const VALID = new Set(['O', '1', '2', '3', '4', 'B', 'D', 'S', 'X'])
+  if (!VALID.has(base)) return ''
+
+  const rbiStr = rbi ? String(rbi).trim() : ''
+  const rbiDigit = /^[1-9]$/.test(rbiStr) ? rbiStr : ''
+
+  return base + rbiDigit + (hasSb ? 's' : '')
 }
+
+/**
+ * OCR 結果 {ab1, rbi1, ab2, rbi2} → 最終打撃コード文字列
+ * 2打席目があればカンマ結合: "O,11"
+ */
+function assembleCode(result: OcrCellResult): string {
+  const parts: string[] = []
+  const p1 = buildAtBat(result.ab1, result.rbi1)
+  if (p1) parts.push(p1)
+  if (result.ab2) {
+    const p2 = buildAtBat(result.ab2, result.rbi2)
+    if (p2) parts.push(p2)
+  }
+  return parts.join(',')
+}
+
+// ── JSON パーサ ────────────────────────────────────────────────────
 
 function extractJson(text: string): unknown {
-  const m = text.match(/\{[\s\S]*\}/)
-  if (!m) return null
-  try { return JSON.parse(m[0]) } catch { return null }
+  // ブラケットカウント方式: 最初の '{' から対応する '}' までを正確に抽出
+  // 単純な greedy regex だと "Note: cell {2}" のような後続テキストで誤マッチする
+  const start = text.indexOf('{')
+  if (start === -1) return null
+  let depth = 0
+  for (let i = start; i < text.length; i++) {
+    if (text[i] === '{') depth++
+    else if (text[i] === '}') {
+      depth--
+      if (depth === 0) {
+        try { return JSON.parse(text.slice(start, i + 1)) } catch { return null }
+      }
+    }
+  }
+  return null
 }
 
-// ── POST ハンドラ ────────────────────────────────────────────────
+// ── POST ハンドラ ─────────────────────────────────────────────────
 
 export async function POST(request: Request): Promise<Response> {
   const session = await auth()
@@ -199,7 +300,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!apiKey) {
     return NextResponse.json(
       { error: 'ANTHROPIC_API_KEY が設定されていません' },
-      { status: 503 }
+      { status: 503 },
     )
   }
 
@@ -207,14 +308,12 @@ export async function POST(request: Request): Promise<Response> {
   let imageBase64 = ''
   let mimeType    = 'image/jpeg'
   let innings     = 7
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let cellsData: Record<string, Record<string, string>> = {}  // order → inning → dataUrl
-  let hasCells    = false
+  let cellsData: Record<string, Record<string, CellSubData>> = {}
+  let hasCells = false
 
   try {
     const fd = await request.formData()
 
-    // 元画像（スコア読み取り用）
     const file = fd.get('image') as File | null
     if (file) {
       const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
@@ -230,65 +329,68 @@ export async function POST(request: Request): Promise<Response> {
 
     innings = Math.min(9, Math.max(5, parseInt(fd.get('innings') as string) || 7))
 
-    // 切り出しセル画像 JSON
     const cellsJson = fd.get('cells') as string | null
     if (cellsJson) {
+      console.log('[ocr-scorebook] cells JSON size:', (cellsJson.length / 1024).toFixed(1), 'KB')
       cellsData = JSON.parse(cellsJson)
       hasCells  = Object.keys(cellsData).length > 0
+      console.log('[ocr-scorebook] parsed cells:', Object.keys(cellsData).length, 'batters')
     }
-  } catch {
-    return NextResponse.json({ error: 'リクエストの解析に失敗しました' }, { status: 400 })
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e)
+    console.error('[ocr-scorebook] FormData解析エラー:', detail)
+    return NextResponse.json({
+      error: `リクエストの解析に失敗しました: ${detail}`
+    }, { status: 400 })
   }
 
   const model = process.env.ANTHROPIC_MODEL ?? 'claude-opus-4-5'
 
-  // ── API コール ────────────────────────────────────────────────
-
+  // ── API コール ──────────────────────────────────────────────
   let rawScores: unknown = null
-  const rawCells: Record<string, unknown> = {}  // order → parsed JSON
+  // order → inning → OcrCellResult
+  const rawOcr: Record<string, Record<string, OcrCellResult>> = {}
 
   try {
     if (hasCells) {
-      // 【新方式】セル切り出しあり
-      // スコア読み取り + 打順グループ3つを並列実行
       const orderGroups = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
-
       const promises: Promise<void>[] = []
 
-      // スコア読み取り（元画像が提供された場合）
+      // スコア読み取り
       if (imageBase64) {
-        const scorePromise = callVision(
-          apiKey, model,
-          makeScoreContent(imageBase64, mimeType, innings),
-          512,
-        ).then(text => { rawScores = extractJson(text) })
-        promises.push(scorePromise)
+        promises.push(
+          callVision(apiKey, model, makeScoreContent(imageBase64, mimeType, innings), 512)
+            .then(text => { rawScores = extractJson(text) })
+        )
       }
 
-      // 打者行読み取り（3グループ並列）
+      // 打者行 OCR（3グループ並列）
       for (const group of orderGroups) {
-        const groupPromise = (async () => {
-          const groupCalls = group
-            .filter(order => cellsData[String(order)] && Object.keys(cellsData[String(order)]).length > 0)
-            .map(async order => {
-              const content = makeCellsContent(order, cellsData[String(order)], innings)
-              if (content.length === 0) return
-              try {
-                const text   = await callVision(apiKey, model, content, 256)
-                const parsed = extractJson(text)
-                if (parsed) rawCells[String(order)] = parsed
-              } catch (e) {
-                console.error(`[ocr] order ${order} error:`, e)
+        promises.push((async () => {
+          await Promise.all(group.map(async order => {
+            const orderCells = cellsData[String(order)]
+            if (!orderCells || Object.keys(orderCells).length === 0) return
+
+            const content = makeCellsContent(order, orderCells)
+            if (content.length === 0) return
+
+            try {
+              const text   = await callVision(apiKey, model, content, 1024)
+              const parsed = extractJson(text)
+              if (parsed && typeof parsed === 'object') {
+                rawOcr[String(order)] = parsed as Record<string, OcrCellResult>
               }
-            })
-          await Promise.all(groupCalls)
-        })()
-        promises.push(groupPromise)
+            } catch (e) {
+              console.error(`[ocr] order ${order} error:`, e)
+            }
+          }))
+        })())
       }
 
       await Promise.all(promises)
+
     } else if (imageBase64) {
-      // 【フォールバック】セル切り出しなし → 元画像から全行読み取り
+      // セル切り出しなし（フォールバック: 元画像から全行読み取り）
       console.warn('[ocr] no cell images — falling back to full-image OCR')
       const [textA, textB, textC, textD] = await Promise.all([
         callVision(apiKey, model, makeScoreContent(imageBase64, mimeType, innings), 512),
@@ -297,11 +399,20 @@ export async function POST(request: Request): Promise<Response> {
         callVision(apiKey, model, makeFullRowsContent([7, 8, 9], innings, imageBase64, mimeType), 1024),
       ])
       rawScores = extractJson(textA)
-      for (const [text, orders] of [[textB, [1, 2, 3]], [textC, [4, 5, 6]], [textD, [7, 8, 9]]] as const) {
-        const parsed = extractJson(text as string) as { batterCells?: Record<string, unknown> } | null
+      for (const [text, orders] of [
+        [textB, [1, 2, 3]], [textC, [4, 5, 6]], [textD, [7, 8, 9]],
+      ] as [string, number[]][]) {
+        const parsed = extractJson(text) as { batterCells?: Record<string, unknown> } | null
         if (parsed?.batterCells) {
           for (const o of orders) {
-            if (parsed.batterCells[String(o)]) rawCells[String(o)] = parsed.batterCells[String(o)]
+            const raw = parsed.batterCells[String(o)]
+            if (raw && typeof raw === 'object') {
+              // フォールバック: 旧形式 {inning: code} を OcrCellResult 形式に変換
+              rawOcr[String(o)] = {}
+              for (const [inn, code] of Object.entries(raw as Record<string, string>)) {
+                rawOcr[String(o)][inn] = { ab1: String(code), rbi1: null, ab2: null, rbi2: null }
+              }
+            }
           }
         }
       }
@@ -310,12 +421,20 @@ export async function POST(request: Request): Promise<Response> {
     }
   } catch (e) {
     const detail = e instanceof Error ? e.message : String(e)
-    console.error('[ocr] error:', detail)
-    return NextResponse.json({ error: detail }, { status: 502 })
+    const stack = e instanceof Error ? e.stack : undefined
+    console.error('[ocr-scorebook] API呼び出しエラー:', {
+      error: detail,
+      stack,
+      name: e instanceof Error ? e.name : typeof e,
+      cause: e instanceof Error ? e.cause : undefined,
+    })
+    return NextResponse.json({
+      error: `OCR処理エラー: ${detail}`,
+      details: stack ? stack.split('\n').slice(0, 5).join('\n') : undefined
+    }, { status: 502 })
   }
 
-  // ── 結果組み立て ─────────────────────────────────────────────
-
+  // ── 結果組み立て ────────────────────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = rawScores as any
   const result: OcrResult = {
@@ -331,28 +450,59 @@ export async function POST(request: Request): Promise<Response> {
     }
   }
 
-  // セル読み取り結果をマージ
+  // OCR 結果 → 打撃コード文字列
   for (let order = 1; order <= 9; order++) {
-    const key       = String(order)
+    const key = String(order)
     result.batterCells[key] = {}
 
-    const raw = rawCells[key]
-    if (!raw || typeof raw !== 'object') continue
+    const orderOcr   = rawOcr[key]
+    const orderCells = cellsData[key]
 
-    for (const [innKey, val] of Object.entries(raw as Record<string, unknown>)) {
-      const code = normalizeCode(val)
-      if (code) result.batterCells[key][innKey] = code
+    // ── Claude の OCR 結果を処理 ────────────────────────────────
+    if (orderOcr && typeof orderOcr === 'object') {
+      for (const [innKey, ocrResult] of Object.entries(orderOcr)) {
+        let code: string
+        if (typeof ocrResult === 'string') {
+          // フォールバック旧形式をそのまま使用
+          code = ocrResult
+        } else {
+          // クライアント形状分類 (preAb1/preAb2) で Claude 結果を上書き
+          const meta = orderCells?.[innKey]
+          const raw  = ocrResult as OcrCellResult
+          const ab1  = meta?.preAb1 === 'SKIP' ? null
+                     : (meta?.preAb1 === 'O' || meta?.preAb1 === '1') ? meta.preAb1
+                     : raw.ab1
+          const ab2  = meta?.preAb2 === 'SKIP' ? null
+                     : (meta?.preAb2 === 'O' || meta?.preAb2 === '1') ? meta.preAb2
+                     : raw.ab2
+          code = assembleCode({ ab1, rbi1: raw.rbi1, ab2, rbi2: raw.rbi2 })
+        }
+        if (code) result.batterCells[key][innKey] = code
+      }
+    }
+
+    // ── preAb のみのイニング（Claude 未返答だが形状分類あり）を追加 ──
+    if (orderCells) {
+      for (const [innKey, cell] of Object.entries(orderCells)) {
+        if (result.batterCells[key][innKey]) continue  // Claude 結果で既に設定済み
+        const pre = cell.preAb1 === 'O' || cell.preAb1 === '1' ? cell.preAb1 : null
+        if (pre) {
+          const code = buildAtBat(pre, null)
+          if (code) result.batterCells[key][innKey] = code
+        }
+      }
     }
   }
 
   const cellCount = Object.values(result.batterCells)
     .reduce((n, row) => n + Object.keys(row).length, 0)
-  console.log(`[ocr] done: ${cellCount} cells from ${hasCells ? 'extracted cells' : 'full image'}`)
+  console.log(`[ocr] done: ${cellCount} cells from ${hasCells ? 'sub-image OCR' : 'full image'}`)
 
-  return NextResponse.json({ data: result })
+  // rawOcr をレスポンスに含める（クライアント側デバッグ表示用）
+  return NextResponse.json({ data: result, rawOcr })
 }
 
-// ── フォールバック用: 全画像から行グループ読み取り ────────────────
+// ── フォールバック: 全画像から行グループ読み取り ─────────────────
 
 function makeFullRowsContent(
   orders:      readonly number[],
@@ -363,22 +513,22 @@ function makeFullRowsContent(
   const orderList = orders.join('、')
   return [
     {
-      type: 'image',
+      type:   'image',
       source: { type: 'base64', media_type: mimeType, data: imageBase64 },
     },
     {
       type: 'text',
       text: `打順${orderList}の行のみ読み取ります。
 
-【★絶対ルール★】2つの数字が隣り合っている場合（"21","11","43"等）→ 1イニング分（打撃コード+打点）。2つの別イニングとして読まない。
-各行のセル数は必ず${innings}個以下。${innings}を超えたら打点数字を別イニングとして誤読しています→修正する。
+【★絶対ルール★】隣り合う数字（"21","11","43"等）→ 1イニング分（打撃コード+打点）。
+各行セル数は最大${innings}個。${innings}を超えたら打点を別イニングと誤読しています→修正する。
 
 コード: O=アウト 1=単打 2=二塁打 3=三塁打 4=本塁打 B=四球 D=死球 S=犠打 X=犠飛
-打点: コード直後の数字。盗塁: 末尾s。2打席目: カンマ区切り
+打点: コード直後の数字。盗塁: 末尾s。2打席目: カンマ区切り。
 
 JSONのみ:
 {"batterCells":{"${orders[0]}":{"1":"O","2":"11"},"${orders[1]}":{},"${orders[2]}":{}}}
-キー: 打順(${orders.map(o => `"${o}"`).join('/')})、イニング("1"〜"${innings}")、空セルはキー省略、不明は"?"`,
+キー: 打順(${orders.map(o => `"${o}"`).join('/')})、イニング("1"〜"${innings}")、空セルはキー省略`,
     },
   ]
 }

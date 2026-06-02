@@ -22,6 +22,11 @@ body {
   font-family: 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif;
 }
 
+/* 印刷時はナビゲーションバーとフッターを非表示 */
+@media print {
+  nav, footer { display: none !important; }
+}
+
 @keyframes gradient-shift {
   0%, 100% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }

@@ -13,10 +13,20 @@
  *   Multi-AB per inning: comma-separated codes in one cell (e.g. "1,O")
  */
 
+export interface BatterSub {
+  fromInning: number
+  userId:     string
+  position?:  string
+  cells:      Record<number, string>
+}
+
 export interface BatterSlot {
-  order:  number
-  userId: string
-  cells:  Record<number, string>  // 1-indexed inning → code string (comma-separated for 2+ ABs)
+  order:      number
+  userId:     string
+  position?:  string   // 前半守備位置
+  position2?: string   // 後半守備位置（同一選手でポジション変更がある場合）
+  cells:      Record<number, string>  // 1-indexed inning → code string (comma-separated for 2+ ABs)
+  subs?:      BatterSub[]
 }
 
 export interface PitcherSlot {
@@ -37,6 +47,7 @@ export interface ScoreBookData {
   pitchers:       PitcherSlot[]
   ourScore?:      number | null
   opponentScore?: number | null
+  inningScores?:  { our: (number | null)[]; opponent: (number | null)[] }
   note?:          string
 }
 
@@ -63,20 +74,23 @@ export const ZERO_STATS: BatterStats = {
 
 /** Parse a single at-bat code into a stats delta. Returns null for empty/invalid input. */
 export function parseCode(raw: string): BatterStats | null {
-  const code = raw.trim()
+  const code = raw.trim().toUpperCase()
   if (!code) return null
-  // O/o = generic out (アウト); K/G/F kept for backward compat
-  const m = code.match(/^([KGFkgfOo1234BDSXbdsx])([0-9])?(s|S)?$/)
+  // O = generic out (アウト); K/G/F kept for backward compat
+  // rest には数字と S が任意順序で現れる ("21S" も "2S1" も許容)
+  const m = code.match(/^([KGFO1234BDSX])([0-9S]*)$/)
   if (!m) return null
 
-  const r   = m[1].toUpperCase()
-  const rbi = m[2] !== undefined ? parseInt(m[2]) : (r === '4' ? 1 : 0)
-  const sb  = m[3] ? 1 : 0
+  const r          = m[1]
+  const rest       = m[2] ?? ''
+  const digitMatch = rest.match(/[0-9]/)
+  const rbi        = digitMatch ? parseInt(digitMatch[0]) : (r === '4' ? 1 : 0)
+  const sb         = rest.includes('S') ? 1 : 0
 
   return {
     pa:       1,
     ab:       'KGFO1234'.includes(r) ? 1 : 0,  // O はアウト扱い（打数カウント）
-    h:        '1234'.includes(r)    ? 1 : 0,
+    h:        '1234'.includes(r)     ? 1 : 0,
     doubles:  r === '2' ? 1 : 0,
     triples:  r === '3' ? 1 : 0,
     homeRuns: r === '4' ? 1 : 0,

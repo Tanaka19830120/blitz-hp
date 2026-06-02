@@ -389,24 +389,26 @@ export default async function AdminSchedulePage({
             className={`glass-card rounded-xl px-4 py-3 ${
               s.dayGroupId ? 'border-l-2 border-[#a78bfa]/50' : ''
             } ${s.id === editId ? 'border border-[#f59e0b]/40' : ''}`}>
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <span className="text-sm font-medium text-[#e2e8f0]">vs {s.opponent}</span>
-                <span className="text-xs text-[#64748b] ml-3">
-                  {new Date(s.date).toLocaleDateString('ja-JP', { year: 'numeric', month: 'short', day: 'numeric' })}
-                </span>
-                <span className="text-xs text-[#475569] ml-2">📍 {s.location}</span>
-                {s.dayGroupId && <span className="text-xs text-[#a78bfa] ml-2">🔗 複数試合</span>}
-              </div>
-              <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                <span className={`text-xs ${
-                  s.type === 'REGULAR'    ? 'text-[#60a5fa]' :
-                  s.type === 'TOURNAMENT' ? 'text-[#fbbf24]' :
-                  s.type === 'EVENT'      ? 'text-[#a78bfa]' : 'text-[#94a3b8]'
-                }`}>
-                  {gameTypeLabels[s.type] ?? s.type}
-                </span>
-                {s.game && <span className="text-xs text-[#22c55e]">✓ 結果入力済</span>}
+            {/* 上段: 試合情報 */}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mb-1.5">
+              <span className="text-sm font-medium text-[#e2e8f0]">vs {s.opponent}</span>
+              <span className="text-xs text-[#64748b]">
+                {new Date(s.date).toLocaleDateString('ja-JP', { year: 'numeric', month: 'short', day: 'numeric' })}
+              </span>
+              <span className={`text-xs ${
+                s.type === 'REGULAR'    ? 'text-[#60a5fa]' :
+                s.type === 'TOURNAMENT' ? 'text-[#fbbf24]' :
+                s.type === 'EVENT'      ? 'text-[#a78bfa]' : 'text-[#94a3b8]'
+              }`}>
+                {gameTypeLabels[s.type] ?? s.type}
+              </span>
+              {s.game && <span className="text-xs text-[#22c55e]">✓ 結果済</span>}
+              {s.dayGroupId && <span className="text-xs text-[#a78bfa]">🔗 複数試合</span>}
+            </div>
+            {/* 下段: 場所 + アクションボタン */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="text-xs text-[#475569] flex-1 min-w-0">📍 {s.location}</span>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <Link
                   href={`/admin/schedule?edit=${s.id}`}
                   className="text-xs text-[#60a5fa]/70 hover:text-[#60a5fa] transition-colors"

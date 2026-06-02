@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { sendToLineGroup, buildGameResult } from '@/lib/line'
 import { ScoreBookEditor } from '@/components/ScoreBookEditor'
 import { ScorePhotoUploader } from '@/components/ScorePhotoUploader'
-import { calcBatterStats, type ScoreBookData } from '@/lib/scorebook'
+import { calcBatterStats, type ScoreBookData, type BatterSub } from '@/lib/scorebook'
 
 // ─── 統合サーバーアクション ────────────────────────────────────────────────
 // スコア + スコアブック + 個人成績を一括保存
@@ -81,11 +81,23 @@ async function saveGame(scheduleId: string, json: string, sendLine: boolean): Pr
     })
   }
 
-  // LINE 通知
+  // LINE 通知（打者・投手成績を含む詳細版）
   if (sendLine) {
     const schedule = await prisma.schedule.findUnique({ where: { id: scheduleId } })
     if (schedule) {
-      const msg = buildGameResult(schedule, { ourScore, opponentScore, result, note: note || null })
+      const userIds = [
+        ...data.batters.map(b => b.userId).filter(Boolean),
+        ...data.pitchers.map(p => p.userId).filter(Boolean),
+      ]
+      const playerList = userIds.length > 0
+        ? await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } })
+        : []
+      const playerNames = new Map(playerList.map(p => [p.id, p.name ?? '']))
+      const msg = buildGameResult(
+        schedule,
+        { ourScore, opponentScore, result, note: note || null },
+        { scorebook: data, playerNames }
+      )
       await sendToLineGroup(msg)
     }
   }
@@ -111,14 +123,22 @@ async function saveScorePhoto(scheduleId: string, photoUrl: string): Promise<voi
 
 type LineupEntry = { battingOrder: number | null; userId: string }
 
-function buildEmptyScoreBook(lineup: LineupEntry[]): ScoreBookData {
+function buildEmptyScoreBook(
+  lineup: LineupEntry[],
+  positionByOrder: Map<number, string> = new Map()
+): ScoreBookData {
   const batters = lineup
     .filter(l => l.battingOrder != null)
     .sort((a, b) => (a.battingOrder ?? 99) - (b.battingOrder ?? 99))
-    .map(l => ({ order: l.battingOrder!, userId: l.userId, cells: {} as Record<number, string> }))
+    .map(l => ({
+      order:    l.battingOrder!,
+      userId:   l.userId,
+      position: positionByOrder.get(l.battingOrder!) ?? '',
+      cells:    {} as Record<number, string>,
+    }))
 
   while (batters.length < 9) {
-    batters.push({ order: batters.length + 1, userId: '', cells: {} })
+    batters.push({ order: batters.length + 1, userId: '', position: '', cells: {} })
   }
   return { innings: 7, batters, pitchers: [] }
 }
@@ -164,11 +184,74 @@ export default async function AdminGamePage({
       })
     : []
 
+  // lineupData_${scheduleId} から打順・守備位置・選手IDをすべて取得（優先ソース）
+  const positionByOrder  = new Map<number, string>()  // 前半守備
+  const position2ByOrder = new Map<number, string>()  // 後半守備（同一選手ポジション変更）
+  const lineupFromData:  LineupEntry[] = []
+  // 後半交代情報（前半と異なる選手が second に設定されている場合）
+  const lineupSubs: Array<{ order: number; userId: string; position: string }> = []
+
+  if (selectedId) {
+    const ldSetting = await prisma.setting.findUnique({ where: { key: `lineupData_${selectedId}` } })
+    if (ldSetting?.value) {
+      try {
+        const ld = JSON.parse(ldSetting.value) as {
+          slots?: Array<{
+            first?:  { playerId?: string; position?: string }
+            second?: { playerId?: string; position?: string }
+          }>
+        }
+        ld.slots?.forEach((slot, idx) => {
+          const pos  = slot.first?.position
+          const pid  = slot.first?.playerId
+          const pid2 = slot.second?.playerId
+          const pos2 = slot.second?.position ?? ''
+
+          if (pos) positionByOrder.set(idx + 1, pos)
+
+          // 実選手のみ userId を設定（ゲスト・空は ''）
+          lineupFromData.push({
+            battingOrder: idx + 1,
+            userId: (pid && !pid.startsWith('__guest_')) ? pid : '',
+          })
+
+          if (pid2 && !pid2.startsWith('__guest_')) {
+            if (pid2 !== pid) {
+              // 選手交代 → サブ行として追加
+              lineupSubs.push({ order: idx + 1, userId: pid2, position: pos2 })
+            } else if (pos2 && pos2 !== pos) {
+              // 同一選手・守備位置変更 → 前半/後半を別々に記録
+              position2ByOrder.set(idx + 1, pos2)
+            }
+          }
+        })
+      } catch { /* ignore */ }
+    }
+  }
+
+  // スコアブック用の打順: lineupData 優先、なければ Prisma Lineup テーブル
+  const lineupForBook: LineupEntry[] = lineupFromData.length > 0 ? lineupFromData : lineup
+
   // スタメン選手を先頭に、残りは全員（飛び入り参加対応）
-  const lineupPlayerIds = new Set(lineup.map(l => l.userId))
-  const lineupPlayers   = lineup.map(l => l.user)
+  // lineupData から取得した選手IDを優先してドロップダウンの並び順に反映
+  const dataPlayerIds   = new Set(lineupFromData.map(l => l.userId).filter(Boolean))
+  const lineupPlayerIds = dataPlayerIds.size > 0
+    ? dataPlayerIds
+    : new Set(lineup.map(l => l.userId))
+  const lineupPlayers   = allPlayers.filter(p => lineupPlayerIds.has(p.id))
   const otherPlayers    = allPlayers.filter(p => !lineupPlayerIds.has(p.id))
   const sortedPlayers   = [...lineupPlayers, ...otherPlayers]
+
+  // lineupForBook を打順→{userId,position,position2} マップに変換（マージ用）
+  const lineupByOrder = new Map(
+    lineupForBook
+      .filter(l => l.battingOrder != null)
+      .map(l => [l.battingOrder!, {
+        userId:    l.userId,
+        position:  positionByOrder.get(l.battingOrder!)  ?? '',
+        position2: position2ByOrder.get(l.battingOrder!),
+      }])
+  )
 
   // スコアブック初期データ（保存済みデータ優先 → スタメンから生成）
   let initialScoreBook: ScoreBookData
@@ -177,20 +260,67 @@ export default async function AdminGamePage({
       const parsed = JSON.parse(existingGame.scorebook) as ScoreBookData
       initialScoreBook = {
         ...parsed,
+        batters: parsed.batters.map(b => {
+          const fromLineup = lineupByOrder.get(b.order)
+          return {
+            ...b,
+            // スタメンに選手がいれば常に反映（スタメン変更を即時反映）
+            // スタメン未入力スロット（userId=''）は保存済み userId を維持
+            userId:    fromLineup?.userId    || b.userId,
+            position:  fromLineup?.position  || b.position  || '',
+            position2: fromLineup?.position2 ?? b.position2,
+          }
+        }),
         // JSON にスコアが保存されていない古いデータは DB の値を補完
         ourScore:      parsed.ourScore      ?? existingGame.ourScore      ?? null,
         opponentScore: parsed.opponentScore ?? existingGame.opponentScore ?? null,
         note:          parsed.note          ?? existingGame.note          ?? '',
       }
     } catch {
-      initialScoreBook = buildEmptyScoreBook(lineup)
+      initialScoreBook = buildEmptyScoreBook(lineupForBook, positionByOrder)
     }
   } else {
     initialScoreBook = {
-      ...buildEmptyScoreBook(lineup),
+      ...buildEmptyScoreBook(lineupForBook, positionByOrder),
       ourScore:      existingGame?.ourScore      ?? null,
       opponentScore: existingGame?.opponentScore ?? null,
       note:          existingGame?.note          ?? '',
+    }
+  }
+
+  // ── 同一選手のポジション変更を position2 に反映 ──
+  if (position2ByOrder.size > 0) {
+    initialScoreBook = {
+      ...initialScoreBook,
+      batters: initialScoreBook.batters.map(b => {
+        const p2 = position2ByOrder.get(b.order)
+        return p2 ? { ...b, position2: p2 } : b
+      }),
+    }
+  }
+
+  // ── スタメンの後半交代をサブ行として自動追加・更新 ──
+  if (lineupSubs.length > 0) {
+    const totalInnings = initialScoreBook.innings ?? 7
+    const defInning    = Math.max(1, Math.ceil(totalInnings / 2))
+    const oldDefault   = defInning + 1  // 以前のバグ値（+1 余分だった）
+    initialScoreBook = {
+      ...initialScoreBook,
+      batters: initialScoreBook.batters.map(b => {
+        const sub = lineupSubs.find(s => s.order === b.order)
+        if (!sub) return b
+        const existing = b.subs ?? []
+        const existingIdx = existing.findIndex(s => s.userId === sub.userId)
+        if (existingIdx >= 0) {
+          // 古いバグ値のままなら自動修正（ユーザーが手動変更した値は保持）
+          const s = existing[existingIdx]
+          if (s.fromInning === oldDefault) {
+            return { ...b, subs: existing.map((si, i) => i === existingIdx ? { ...si, fromInning: defInning } : si) }
+          }
+          return b
+        }
+        return { ...b, subs: [...existing, { fromInning: defInning, userId: sub.userId, position: sub.position, cells: {} }] }
+      }),
     }
   }
 
@@ -279,7 +409,12 @@ export default async function AdminGamePage({
                 scheduleId={selected.id}
                 initialData={initialScoreBook}
                 saveAction={saveGame}
+                savePhotoAction={saveScorePhoto}
                 lineConfigured={lineConfigured}
+                scheduleInfo={{
+                  date:     selected.date.toISOString(),
+                  opponent: selected.opponent,
+                }}
               />
 
               {/* スコア表写真（保存済みゲームがある場合のみ表示） */}

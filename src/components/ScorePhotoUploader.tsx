@@ -81,7 +81,6 @@ export function ScorePhotoUploader({ scheduleId, currentPhotoUrl, savePhotoActio
           id={`score-photo-${scheduleId}`}
           type="file"
           accept="image/*"
-          capture="environment"
           onChange={handleFile}
           disabled={isUploading}
           className="hidden"

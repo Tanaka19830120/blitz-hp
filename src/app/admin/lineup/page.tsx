@@ -33,7 +33,8 @@ async function saveLineup(formData: FormData) {
 
   for (let i = 0; i < data.slots.length; i++) {
     const slot = data.slots[i]
-    if (!slot.first.playerId) continue
+    // 未入力・ゲスト（__guest_*）は Lineup テーブルには書かない（FK制約エラー回避）
+    if (!slot.first.playerId || slot.first.playerId.startsWith('__guest_')) continue
     const pos = slot.first.position
     await prisma.lineup.create({
       data: {
@@ -238,9 +239,14 @@ export default async function AdminLineupPage({
     (process.env.LINE_GROUP_ID ||
       await prisma.setting.findUnique({ where: { key: 'detectedLineGroupId' } }).then(s => s?.value ?? '').catch(() => '')))
 
+  // 今日の0時（UTC）以降を「今後の試合」とする
+  // new Date() だと現在時刻なので当日分が時間経過とともに消えてしまう
+  const todayStart = new Date()
+  todayStart.setUTCHours(0, 0, 0, 0)
+
   const [upcomingSchedules, allUsers] = await Promise.all([
     prisma.schedule.findMany({
-      where:   { date: { gte: new Date() } },
+      where:   { date: { gte: todayStart } },
       orderBy: { date: 'asc' },
       take:    40,
     }),
@@ -334,6 +340,25 @@ export default async function AdminLineupPage({
     : null
   const lineSentAt = sentSetting?.value ?? null
 
+  // LINE 送信プレビューテキストを生成（各試合分）
+  const previewTexts: string[] = []
+  for (const schedule of selectedGroup) {
+    const dataSetting = await prisma.setting.findUnique({ where: { key: `lineupData_${schedule.id}` } })
+    if (dataSetting?.value) {
+      const data: LineupData = JSON.parse(dataSetting.value)
+      previewTexts.push(buildLineupFromJson(schedule, data, players.map(p => ({ id: p.id, name: p.name ?? '', number: p.number }))))
+    } else {
+      const lineups = await prisma.lineup.findMany({
+        where:   { scheduleId: schedule.id },
+        include: { user: { select: { name: true, number: true } } },
+        orderBy: { battingOrder: 'asc' },
+      })
+      if (lineups.length > 0) {
+        previewTexts.push(buildLineup(schedule, lineups))
+      }
+    }
+  }
+
   return (
     <div className="pt-16 max-w-2xl mx-auto px-4 py-12">
       <div className="flex items-center gap-4 mb-8">
@@ -384,6 +409,7 @@ export default async function AdminLineupPage({
                 lineConfigured={lineConfigured}
                 senderLabel={senderLabel}
                 sendAction={sendLineLineupGroup}
+                previewTexts={previewTexts}
               />
 
               {/* 同日複数試合タブ */}
