@@ -155,7 +155,7 @@ function OpponentSelect({ opponents, defaultValue = '' }: { opponents: string[];
   const isCustom = defaultValue && !opponents.includes(defaultValue)
   return opponents.length > 0 ? (
     <>
-      <select name="opponentSelect" className="mb-2" defaultValue={isCustom ? '__custom__' : defaultValue}>
+      <select name="opponentSelect" required className="mb-2" defaultValue={isCustom ? '__custom__' : defaultValue}>
         <option value="">── 選択してください ──</option>
         {opponents.map(o => <option key={o} value={o}>{o}</option>)}
         <option value="__custom__">その他（直接入力）...</option>
@@ -179,7 +179,7 @@ function LocationSelect({ locations, defaultValue = '' }: { locations: string[];
   const isCustom = defaultValue && !locations.includes(defaultValue)
   return locations.length > 0 ? (
     <>
-      <select name="locationSelect" className="mb-2" defaultValue={isCustom ? '__custom__' : defaultValue}>
+      <select name="locationSelect" required className="mb-2" defaultValue={isCustom ? '__custom__' : defaultValue}>
         <option value="">── 選択してください ──</option>
         {locations.map(l => <option key={l} value={l}>{l}</option>)}
         <option value="__custom__">その他（直接入力）...</option>
