@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import bcrypt from 'bcryptjs'
 import Link from 'next/link'
 import { PhotoUploader } from '@/components/PhotoUploader'
+import { SubmitButton } from '@/components/SubmitButton'
 
 async function createMember(formData: FormData) {
   'use server'
@@ -28,7 +29,7 @@ async function createMember(formData: FormData) {
   })
   revalidatePath('/members')
   revalidatePath('/admin')
-  redirect('/admin/members')
+  redirect(`/admin/members?toast=${encodeURIComponent('メンバーを追加しました')}`)
 }
 
 async function toggleRole(formData: FormData) {
@@ -38,6 +39,7 @@ async function toggleRole(formData: FormData) {
   const next    = current === 'ADMIN' ? 'PLAYER' : 'ADMIN'
   await prisma.user.update({ where: { id }, data: { role: next } })
   revalidatePath('/admin/members')
+  redirect(`/admin/members?toast=${encodeURIComponent('権限を変更しました')}`)
 }
 
 async function updateMember(formData: FormData) {
@@ -69,6 +71,7 @@ async function updateMember(formData: FormData) {
   revalidatePath('/members')
   revalidatePath(`/members/${id}`)
   revalidatePath('/stats')
+  redirect(`/admin/members?toast=${encodeURIComponent('メンバーを更新しました')}`)
 }
 
 async function resetPassword(formData: FormData) {
@@ -80,6 +83,7 @@ async function resetPassword(formData: FormData) {
   const hash = await bcrypt.hash(`${loginId}${loginId}`, 10)
   await prisma.user.update({ where: { id }, data: { password: hash } })
   revalidatePath('/admin/members')
+  redirect(`/admin/members?toast=${encodeURIComponent('パスワードをリセットしました')}`)
 }
 
 async function deleteMember(formData: FormData) {
@@ -88,6 +92,7 @@ async function deleteMember(formData: FormData) {
   await prisma.user.delete({ where: { id } })
   revalidatePath('/members')
   revalidatePath('/admin')
+  redirect(`/admin/members?toast=${encodeURIComponent('メンバーを削除しました')}`)
 }
 
 export default async function AdminMembersPage({
@@ -128,9 +133,10 @@ export default async function AdminMembersPage({
                 </span>
                 <form action={resetPassword}>
                   <input type="hidden" name="id" value={editMember.id} />
-                  <button type="submit" className="text-[#fbbf24] hover:text-[#fbbf24]/80 ml-3">
+                  <SubmitButton pendingLabel="リセット中…" className="text-[#fbbf24] hover:text-[#fbbf24]/80 ml-3"
+                    confirm="パスワードを初期値にリセットしますか？">
                     PW リセット
-                  </button>
+                  </SubmitButton>
                 </form>
               </div>
             )
@@ -162,7 +168,7 @@ export default async function AdminMembersPage({
               <PhotoUploader defaultUrl={editMember.photoUrl ?? ''} />
             </div>
             <div className="sm:col-span-2 flex gap-3">
-              <button type="submit" className="btn-primary flex-1 py-2.5">保存する</button>
+              <SubmitButton pendingLabel="保存中…" className="btn-primary flex-1 py-2.5">保存する</SubmitButton>
               <Link href="/admin/members" className="btn-secondary flex-1 py-2.5 text-center">キャンセル</Link>
             </div>
           </form>
@@ -197,7 +203,7 @@ export default async function AdminMembersPage({
               <PhotoUploader />
             </div>
             <div className="sm:col-span-2">
-              <button type="submit" className="btn-primary w-full py-2.5">追加する</button>
+              <SubmitButton pendingLabel="追加中…" className="btn-primary w-full py-2.5">追加する</SubmitButton>
             </div>
           </form>
         </div>
@@ -263,12 +269,13 @@ export default async function AdminMembersPage({
               </Link>
               <form action={deleteMember}>
                 <input type="hidden" name="id" value={m.id} />
-                <button
-                  type="submit"
+                <SubmitButton
+                  pendingLabel="削除中…"
+                  confirm={`${m.name} を削除しますか？`}
                   className="text-xs text-[#ef4444]/50 hover:text-[#ef4444] transition-colors"
                 >
                   削除
-                </button>
+                </SubmitButton>
               </form>
             </div>
           </div>

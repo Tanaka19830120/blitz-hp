@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/auth'
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { getGameTypeLabels } from '@/lib/settings'
 import { mapsUrl } from '@/lib/maps'
 
@@ -35,6 +36,7 @@ async function updateAttendance(formData: FormData) {
     )
   )
   revalidatePath('/schedule')
+  redirect(`/schedule?toast=${encodeURIComponent('出欠を登録しました')}`)
 }
 
 function formatDate(date: Date) {

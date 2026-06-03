@@ -1,7 +1,9 @@
 import type { Metadata } from 'next'
+import { Suspense } from 'react'
 import './globals.css'
 import { Navbar } from '@/components/Navbar'
 import { Providers } from '@/components/Providers'
+import { Toast } from '@/components/Toast'
 
 export const metadata: Metadata = {
   title: 'BLITZ | ソフトボールチーム',
@@ -17,6 +19,9 @@ export default function RootLayout({
     <html lang="ja" className="h-full">
       <body className="min-h-full flex flex-col">
         <Providers>
+          <Suspense fallback={null}>
+            <Toast />
+          </Suspense>
           <Navbar />
           <main className="flex-1">{children}</main>
           <footer className="border-t border-[#1e3a5f] py-6 text-center text-[#64748b] text-sm">

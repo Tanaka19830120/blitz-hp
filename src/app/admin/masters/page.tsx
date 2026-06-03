@@ -1,10 +1,14 @@
 import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import {
   getMasterList, saveMasterList,
   getGameTypeLabels, GAME_TYPE_KEYS, GAME_TYPE_DEFAULT_LABELS,
 } from '@/lib/settings'
+import { SubmitButton } from '@/components/SubmitButton'
+
+const mastersToast = (msg: string) => `/admin/masters?toast=${encodeURIComponent(msg)}`
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +23,7 @@ async function addOpponent(formData: FormData) {
     await saveMasterList('opponentMaster', [...list, name].sort())
   }
   revalidatePath('/admin/masters')
+  redirect(mastersToast('対戦相手を追加しました'))
 }
 
 async function removeOpponent(formData: FormData) {
@@ -27,6 +32,7 @@ async function removeOpponent(formData: FormData) {
   const list = await getMasterList('opponentMaster')
   await saveMasterList('opponentMaster', list.filter(x => x !== name))
   revalidatePath('/admin/masters')
+  redirect(mastersToast('対戦相手を削除しました'))
 }
 
 // ─── 球場マスタ ──────────────────────────────────────────────────
@@ -40,6 +46,7 @@ async function addLocation(formData: FormData) {
     await saveMasterList('locationMaster', [...list, name].sort())
   }
   revalidatePath('/admin/masters')
+  redirect(mastersToast('球場を追加しました'))
 }
 
 async function removeLocation(formData: FormData) {
@@ -48,6 +55,7 @@ async function removeLocation(formData: FormData) {
   const list = await getMasterList('locationMaster')
   await saveMasterList('locationMaster', list.filter(x => x !== name))
   revalidatePath('/admin/masters')
+  redirect(mastersToast('球場を削除しました'))
 }
 
 // ─── 試合種別ラベル ──────────────────────────────────────────────
@@ -67,6 +75,7 @@ async function updateGameTypeLabels(formData: FormData) {
   revalidatePath('/admin/masters')
   revalidatePath('/admin/schedule')
   revalidatePath('/schedule')
+  redirect(mastersToast('種別ラベルを更新しました'))
 }
 
 // ─── 初期シード（既存のScheduleデータからマスタを作成）────────────
@@ -98,6 +107,7 @@ async function seedMasters(formData: FormData) {
   }
 
   revalidatePath('/admin/masters')
+  redirect(mastersToast('既存データから取り込みました'))
 }
 
 // ─── Page ────────────────────────────────────────────────────────
@@ -131,7 +141,7 @@ export default async function AdminMastersPage() {
         {/* 追加フォーム */}
         <form action={addOpponent} className="flex gap-2 mb-4">
           <input type="text" name="name" placeholder="チーム名を入力" className="flex-1" required />
-          <button type="submit" className="btn-primary px-4 py-2 text-sm whitespace-nowrap">追加</button>
+          <SubmitButton pendingLabel="追加中…" className="btn-primary px-4 py-2 text-sm whitespace-nowrap">追加</SubmitButton>
         </form>
 
         {/* 一覧 */}
@@ -166,7 +176,7 @@ export default async function AdminMastersPage() {
 
         <form action={addLocation} className="flex gap-2 mb-4">
           <input type="text" name="name" placeholder="球場名を入力" className="flex-1" required />
-          <button type="submit" className="btn-primary px-4 py-2 text-sm whitespace-nowrap">追加</button>
+          <SubmitButton pendingLabel="追加中…" className="btn-primary px-4 py-2 text-sm whitespace-nowrap">追加</SubmitButton>
         </form>
 
         {locations.length === 0 ? (
@@ -206,7 +216,7 @@ export default async function AdminMastersPage() {
               />
             </div>
           ))}
-          <button type="submit" className="btn-primary w-full py-2.5 mt-2">ラベルを保存</button>
+          <SubmitButton pendingLabel="保存中…" className="btn-primary w-full py-2.5 mt-2">ラベルを保存</SubmitButton>
         </form>
       </section>
     </div>

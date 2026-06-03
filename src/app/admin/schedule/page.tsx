@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
 import { getMasterList, getGameTypeLabels } from '@/lib/settings'
 import { ScheduleCreateForm } from '@/components/ScheduleCreateForm'
-import { ConfirmSubmitButton } from '@/components/ConfirmSubmitButton'
+import { SubmitButton } from '@/components/SubmitButton'
 
 // ─── 新規追加 ──────────────────────────────────────────────────────
 type CreateResult = { ok: boolean; error?: string } | null
@@ -83,7 +83,7 @@ async function addGameToDay(formData: FormData) {
   })
   revalidatePath('/schedule')
   revalidatePath('/admin')
-  redirect('/admin/schedule')
+  redirect(`/admin/schedule?toast=${encodeURIComponent('試合を追加しました')}`)
 }
 
 // ─── 編集・更新 ──────────────────────────────────────────────────────
@@ -121,7 +121,7 @@ async function updateSchedule(formData: FormData) {
   })
   revalidatePath('/schedule')
   revalidatePath('/admin')
-  redirect('/admin/schedule')
+  redirect(`/admin/schedule?toast=${encodeURIComponent('日程を更新しました')}`)
 }
 
 // ─── グループ解除 ─────────────────────────────────────────────────
@@ -141,6 +141,7 @@ async function unlinkFromGroup(formData: FormData) {
   }
   revalidatePath('/schedule')
   revalidatePath('/admin')
+  redirect(`/admin/schedule?toast=${encodeURIComponent('グループを解除しました')}`)
 }
 
 // ─── 削除 ────────────────────────────────────────────────────────────
@@ -150,6 +151,7 @@ async function deleteSchedule(formData: FormData) {
   await prisma.schedule.delete({ where: { id } })
   revalidatePath('/schedule')
   revalidatePath('/admin')
+  redirect(`/admin/schedule?toast=${encodeURIComponent('削除しました')}`)
 }
 
 function toDateInput(d: Date) {
@@ -293,7 +295,7 @@ export default async function AdminSchedulePage({
               <input type="time" name="startTime" />
             </div>
             <div className="sm:col-span-2">
-              <button type="submit" className="btn-primary w-full py-2.5">同日グループに追加する</button>
+              <SubmitButton pendingLabel="追加中…" className="btn-primary w-full py-2.5">同日グループに追加する</SubmitButton>
             </div>
           </form>
         </div>
@@ -341,7 +343,7 @@ export default async function AdminSchedulePage({
               <textarea name="note" rows={3} defaultValue={editSchedule.note ?? ''} placeholder="備考・注意事項など（改行可）" className="w-full resize-y" />
             </div>
             <div className="sm:col-span-2">
-              <button type="submit" className="btn-primary w-full py-2.5">更新する</button>
+              <SubmitButton pendingLabel="更新中…" className="btn-primary w-full py-2.5">更新する</SubmitButton>
             </div>
           </form>
         </div>
@@ -404,21 +406,22 @@ export default async function AdminSchedulePage({
                 {s.dayGroupId && (
                   <form action={unlinkFromGroup}>
                     <input type="hidden" name="id" value={s.id} />
-                    <button type="submit" className="text-xs text-[#64748b]/60 hover:text-[#94a3b8] transition-colors">
+                    <SubmitButton pendingLabel="解除中…" className="text-xs text-[#64748b]/60 hover:text-[#94a3b8] transition-colors">
                       グループ解除
-                    </button>
+                    </SubmitButton>
                   </form>
                 )}
                 <form action={deleteSchedule}>
                   <input type="hidden" name="id" value={s.id} />
-                  <ConfirmSubmitButton
-                    message={s.game
+                  <SubmitButton
+                    pendingLabel="削除中…"
+                    confirm={s.game
                       ? `この日程（${s.opponent ? `vs ${s.opponent}` : 'イベント'}）には試合結果が登録されています。削除すると試合結果・個人成績もすべて削除されます。本当に削除しますか？`
                       : `この日程（${s.opponent ? `vs ${s.opponent}` : 'イベント'}）を削除しますか？`}
                     className="text-xs text-[#ef4444]/60 hover:text-[#ef4444] transition-colors"
                   >
                     削除
-                  </ConfirmSubmitButton>
+                  </SubmitButton>
                 </form>
               </div>
             </div>
