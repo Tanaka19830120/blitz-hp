@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { auth } from '@/auth'
 import { revalidatePath } from 'next/cache'
 import { getGameTypeLabels } from '@/lib/settings'
+import { mapsUrl } from '@/lib/maps'
 
 async function updateAttendance(formData: FormData) {
   'use server'
@@ -160,7 +161,8 @@ export default async function SchedulePage() {
                               </span>
                             </div>
                             <div className="flex flex-wrap gap-x-3 text-xs text-[#64748b]">
-                              <span>📍 {s.location}</span>
+                              <a href={mapsUrl(s.location)} target="_blank" rel="noopener noreferrer"
+                                className="text-[#60a5fa] hover:underline">📍 {s.location} 🗺</a>
                               {s.startTime && <span>▶ {s.startTime}</span>}
                             </div>
                           </div>
@@ -175,7 +177,10 @@ export default async function SchedulePage() {
                     )}
 
                     <div className="flex flex-wrap gap-4 text-sm text-[#64748b]">
-                      {!isMulti && <span>📍 {primary.location}</span>}
+                      {!isMulti && (
+                        <a href={mapsUrl(primary.location)} target="_blank" rel="noopener noreferrer"
+                          className="text-[#60a5fa] hover:underline">📍 {primary.location} 🗺</a>
+                      )}
                       {primary.meetTime  && <span>🕐 集合 {primary.meetTime}</span>}
                       {!isMulti && primary.startTime && <span>⚾ 開始 {primary.startTime}</span>}
                     </div>

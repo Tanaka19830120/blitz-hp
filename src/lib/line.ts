@@ -7,6 +7,7 @@
 import { prisma } from './prisma'
 import type { ScoreBookData } from './scorebook'
 import { calcBatterStats } from './scorebook'
+import { mapsUrl } from './maps'
 
 const LINE_PUSH_API = 'https://api.line.me/v2/bot/message/push'
 
@@ -89,6 +90,7 @@ export function buildReminder(schedules: {
     ? [
         `━━━━━━━━━━━━`,
         `📍 ${primary.location}`,
+        `🗺 地図：${mapsUrl(primary.location)}`,
         primary.meetTime  ? `🔔 集合：${primary.meetTime}`     : null,
         primary.startTime ? `▶ 試合開始：${primary.startTime}` : null,
         `━━━━━━━━━━━━`,
@@ -106,6 +108,7 @@ export function buildReminder(schedules: {
     : list.flatMap((s, i) => [
         `⚾ 第${i + 1}試合 vs ${s.opponent}`,
         `📍 ${s.location}${s.startTime ? ` ▶ ${s.startTime}` : ''}`,
+        `🗺 地図：${mapsUrl(s.location)}`,
       ])
 
   return [
@@ -178,6 +181,7 @@ export function buildLineup(
     `${fmt(schedule.date)} vs ${schedule.opponent}`,
     `━━━━━━━━━━━━`,
     `📍 ${schedule.location}`,
+    `🗺 地図：${mapsUrl(schedule.location)}`,
     schedule.meetTime  ? `🔔 集合：${schedule.meetTime}`    : null,
     schedule.startTime ? `▶ 試合開始：${schedule.startTime}` : null,
     `━━━━━━━━━━━━`,
@@ -222,6 +226,7 @@ export function buildLineupFromJson(
     `${fmt(schedule.date)} vs ${schedule.opponent}`,
     `━━━━━━━━━━━━`,
     `📍 ${schedule.location}`,
+    `🗺 地図：${mapsUrl(schedule.location)}`,
     schedule.meetTime  ? `🔔 集合：${schedule.meetTime}`    : null,
     schedule.startTime ? `▶ 試合開始：${schedule.startTime}` : null,
     `━━━━━━━━━━━━`,
