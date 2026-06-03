@@ -48,6 +48,7 @@ model User {
   gameStats     GameStat[]
   pitchingStats PitchingStat[]
   lineups       Lineup[]
+  photos        Photo[]
 }
 
 model Schedule {
@@ -164,4 +165,29 @@ model Lineup {
   schedule Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
 
   @@unique([userId, scheduleId])
+}
+
+// ── 写真アルバム（イベント・試合の写真） ──
+model PhotoAlbum {
+  id        String   @id @default(cuid())
+  title     String
+  date      DateTime
+  createdAt DateTime @default(now())
+
+  photos    Photo[]
+
+  @@index([date])
+}
+
+model Photo {
+  id           String     @id @default(cuid())
+  albumId      String
+  url          String
+  uploadedById String?
+  createdAt    DateTime   @default(now())
+
+  album        PhotoAlbum @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  uploadedBy   User?      @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([albumId])
 }

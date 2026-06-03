@@ -60,6 +60,32 @@ async function main() {
   )
   console.log('✓ Setting table ready')
 
+  // v8: 写真アルバム
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS "PhotoAlbum" (
+      "id"        TEXT PRIMARY KEY,
+      "title"     TEXT NOT NULL,
+      "date"      DATETIME NOT NULL,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `)
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS "Photo" (
+      "id"           TEXT PRIMARY KEY,
+      "albumId"      TEXT NOT NULL,
+      "url"          TEXT NOT NULL,
+      "uploadedById" TEXT,
+      "createdAt"    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "Photo_albumId_fkey" FOREIGN KEY ("albumId") REFERENCES "PhotoAlbum"("id") ON DELETE CASCADE,
+      CONSTRAINT "Photo_uploadedById_fkey" FOREIGN KEY ("uploadedById") REFERENCES "User"("id") ON DELETE SET NULL
+    );
+  `)
+  try {
+    await client.execute(`CREATE INDEX IF NOT EXISTS "PhotoAlbum_date_idx" ON "PhotoAlbum"("date");`)
+    await client.execute(`CREATE INDEX IF NOT EXISTS "Photo_albumId_idx" ON "Photo"("albumId");`)
+    console.log('✓ PhotoAlbum / Photo tables ready')
+  } catch { /* already exists */ }
+
   console.log('Migrations complete.')
   await client.close()
 }
