@@ -14,27 +14,29 @@ export function Toast() {
   const pathname = usePathname()
   const [msg, setMsg] = useState<string | null>(null)
 
+  // ① URL の toast パラメータを検出 → 表示してURLから除去
   useEffect(() => {
     const t = params.get('toast')
     if (!t) return
     setMsg(t)
-
-    // URL から toast パラメータを除去（再表示・共有時のちらつき防止）
     const next = new URLSearchParams(params.toString())
     next.delete('toast')
     const qs = next.toString()
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
-
-    const timer = setTimeout(() => setMsg(null), 2800)
-    return () => clearTimeout(timer)
-    // params の変化時のみ実行
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params])
+
+  // ② 表示中のトーストを一定時間後に消す（params変化の影響を受けない独立タイマー）
+  useEffect(() => {
+    if (!msg) return
+    const timer = setTimeout(() => setMsg(null), 2800)
+    return () => clearTimeout(timer)
+  }, [msg])
 
   if (!msg) return null
 
   return (
-    <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[9999] px-5 py-2.5 rounded-xl shadow-lg text-sm font-bold bg-[#16a34a] text-white animate-[fadeIn_0.15s_ease-out]">
+    <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[9999] px-5 py-2.5 rounded-xl shadow-lg text-sm font-bold bg-[#16a34a] text-white">
       ✅ {msg}
     </div>
   )
