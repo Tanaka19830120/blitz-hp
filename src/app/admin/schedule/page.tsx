@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
 import { getMasterList, getGameTypeLabels } from '@/lib/settings'
 import { ScheduleCreateForm } from '@/components/ScheduleCreateForm'
+import { ConfirmSubmitButton } from '@/components/ConfirmSubmitButton'
 
 // ─── 新規追加 ──────────────────────────────────────────────────────
 type CreateResult = { ok: boolean; error?: string } | null
@@ -404,14 +405,17 @@ export default async function AdminSchedulePage({
                     </button>
                   </form>
                 )}
-                {!s.game && (
-                  <form action={deleteSchedule}>
-                    <input type="hidden" name="id" value={s.id} />
-                    <button type="submit" className="text-xs text-[#ef4444]/60 hover:text-[#ef4444] transition-colors">
-                      削除
-                    </button>
-                  </form>
-                )}
+                <form action={deleteSchedule}>
+                  <input type="hidden" name="id" value={s.id} />
+                  <ConfirmSubmitButton
+                    message={s.game
+                      ? `この日程（${s.opponent ? `vs ${s.opponent}` : 'イベント'}）には試合結果が登録されています。削除すると試合結果・個人成績もすべて削除されます。本当に削除しますか？`
+                      : `この日程（${s.opponent ? `vs ${s.opponent}` : 'イベント'}）を削除しますか？`}
+                    className="text-xs text-[#ef4444]/60 hover:text-[#ef4444] transition-colors"
+                  >
+                    削除
+                  </ConfirmSubmitButton>
+                </form>
               </div>
             </div>
           </div>
