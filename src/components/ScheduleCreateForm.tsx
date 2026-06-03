@@ -44,7 +44,10 @@ export function ScheduleCreateForm({ opponents, locations, types, typeLabels, ac
     }
     const t = setTimeout(() => setToast(null), 2500)
     return () => clearTimeout(t)
-  }, [state, router, types])
+    // state の変化（フォーム送信結果）時のみ実行する。
+    // router/types を依存に含めると refresh による再レンダリングで無限ループになるため除外。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state])
 
   return (
     <div className="glass-card rounded-2xl p-6 mb-8 relative">
