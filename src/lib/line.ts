@@ -73,12 +73,14 @@ export function buildReminder(schedules: {
   location: string
   meetTime?: string | null
   startTime?: string | null
+  note?: string | null
 } | {
   date: Date
   opponent: string
   location: string
   meetTime?: string | null
   startTime?: string | null
+  note?: string | null
 }[]): string {
   const list = Array.isArray(schedules) ? schedules : [schedules]
   const primary = list[0]
@@ -111,6 +113,12 @@ export function buildReminder(schedules: {
         `🗺 地図：${mapsUrl(s.location)}`,
       ])
 
+  // 備考（メモ）— いずれかの試合に note があれば表示
+  const note = list.map(s => s.note).find(n => n && n.trim())
+  const noteBlock = note
+    ? ['', `📝 ${note.trim()}`]
+    : []
+
   return [
     `📅【BLITZ】出欠登録のお願い`,
     ``,
@@ -118,6 +126,7 @@ export function buildReminder(schedules: {
     ...infoBlock,
     ``,
     ...gameLines,
+    ...noteBlock,
     ``,
     `出欠の登録をお願いします！`,
     `👉 https://blitz-hp.vercel.app/schedule`,
