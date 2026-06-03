@@ -1,5 +1,9 @@
 import { prisma } from '@/lib/prisma'
+import { auth } from '@/auth'
+import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import { SubmitButton } from '@/components/SubmitButton'
 
 function formatDate(date: Date) {
   return new Date(date).toLocaleDateString('ja-JP', {
@@ -10,12 +14,30 @@ function formatDate(date: Date) {
   })
 }
 
+// ── 試合結果の個別削除（管理者のみ・日程は残す） ──
+async function deleteGame(formData: FormData) {
+  'use server'
+  const session = await auth()
+  if ((session?.user as { role?: string })?.role !== 'ADMIN') return
+  const gameId = String(formData.get('gameId'))
+  const scheduleId = String(formData.get('scheduleId'))
+  await prisma.game.delete({ where: { id: gameId } })
+  revalidatePath('/results')
+  revalidatePath('/stats')
+  revalidatePath('/')
+  revalidatePath('/admin')
+  if (scheduleId) revalidatePath(`/results/${scheduleId}`)
+  redirect(`/results?toast=${encodeURIComponent('試合結果を削除しました')}`)
+}
+
 export default async function ResultsPage({
   searchParams,
 }: {
   searchParams: Promise<{ year?: string }>
 }) {
   const sp = await searchParams
+  const session = await auth()
+  const isAdmin = (session?.user as { role?: string })?.role === 'ADMIN'
   const currentYear = new Date().getFullYear()
   const selectedYear = sp.year ? parseInt(sp.year) : undefined
 
@@ -186,6 +208,19 @@ export default async function ResultsPage({
                       >
                         詳細 →
                       </Link>
+                      {isAdmin && (
+                        <form action={deleteGame}>
+                          <input type="hidden" name="gameId" value={game.id} />
+                          <input type="hidden" name="scheduleId" value={game.schedule.id} />
+                          <SubmitButton
+                            pendingLabel="削除中…"
+                            confirm={`${formatDate(game.schedule.date)} vs ${game.schedule.opponent} の試合結果を削除しますか？（個人成績も削除されます。日程は残ります）`}
+                            className="text-xs px-3 py-1.5 rounded-lg border border-[#ef4444]/40 text-[#ef4444]/80 hover:bg-[#ef4444]/10 transition-all whitespace-nowrap"
+                          >
+                            削除
+                          </SubmitButton>
+                        </form>
+                      )}
                     </div>
                   </div>
                 </div>
