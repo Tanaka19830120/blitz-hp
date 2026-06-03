@@ -106,12 +106,14 @@ async function updateSchedule(formData: FormData) {
   const locationCustom = String(formData.get('locationCustom') || '').trim()
   const location = (locationSelect === '__custom__' ? locationCustom : locationSelect) || locationCustom
 
-  if (!opponent || !location) return
+  // イベントは対戦相手なしでも可
+  if (!location) return
+  if (!opponent && type !== 'EVENT') return
 
   await prisma.schedule.update({
     where: { id },
     data: {
-      date: dateTime, opponent, location, type,
+      date: dateTime, opponent: opponent || '', location, type,
       meetTime:  meetTime  || null,
       startTime: startTime || null,
       note:      String(formData.get('note') || '') || null,
@@ -366,7 +368,9 @@ export default async function AdminSchedulePage({
             } ${s.id === editId ? 'border border-[#f59e0b]/40' : ''}`}>
             {/* 上段: 試合情報 */}
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mb-1.5">
-              <span className="text-sm font-medium text-[#e2e8f0]">{s.opponent ? `vs ${s.opponent}` : 'イベント'}</span>
+              <span className="text-sm font-medium text-[#e2e8f0]">
+                {s.type === 'EVENT' ? `🎉 ${s.opponent || 'イベント'}` : `vs ${s.opponent}`}
+              </span>
               <span className="text-xs text-[#64748b]">
                 {new Date(s.date).toLocaleDateString('ja-JP', { year: 'numeric', month: 'short', day: 'numeric' })}
               </span>

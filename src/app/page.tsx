@@ -209,7 +209,9 @@ export default async function HomePage() {
               </div>
               <div className="text-[#94a3b8] text-sm mb-1">{formatDate(nextSchedule.date)}</div>
               <div className="text-2xl font-bold">
-                vs <span className="text-[#fbbf24]">{nextSchedule.opponent}</span>
+                {nextSchedule.type === 'EVENT'
+                  ? <span className="text-[#a78bfa]">🎉 {nextSchedule.opponent || 'イベント'}</span>
+                  : <>vs <span className="text-[#fbbf24]">{nextSchedule.opponent}</span></>}
               </div>
               <div className="flex flex-wrap gap-4 mt-3 text-sm text-[#64748b]">
                 <span>📍 {nextSchedule.location}</span>

@@ -32,8 +32,6 @@ export function ScheduleCreateForm({ opponents, locations, types, typeLabels, ac
   const [formKey, setFormKey] = useState(0)
   const formRef = useRef<HTMLFormElement>(null)
 
-  const opponentRequired = type !== 'EVENT'
-
   useEffect(() => {
     if (!state) return
     if (state.ok) {
@@ -76,23 +74,33 @@ export function ScheduleCreateForm({ opponents, locations, types, typeLabels, ac
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">
-            対戦相手 {opponentRequired ? '*' : <span className="text-[#475569]">（イベントは任意）</span>}
-          </label>
-          {opponents.length > 0 ? (
+          {type === 'EVENT' ? (
+            /* イベントの場合: 対戦相手の代わりにイベント内容を記述 */
             <>
-              <select name="opponentSelect" required={opponentRequired} className="mb-2" defaultValue="">
-                <option value="">── 選択してください ──</option>
-                {opponents.map(o => <option key={o} value={o}>{o}</option>)}
-                <option value="__custom__">その他（直接入力）...</option>
-              </select>
-              <input type="text" name="opponentCustom" placeholder="マスタにない場合は直接入力" className="text-sm" />
-              <p className="text-[10px] text-[#475569] mt-1">
-                新しいチームを追加するには<Link href="/admin/masters" className="text-[#60a5fa] ml-1 hover:underline">マスタ管理</Link>へ
-              </p>
+              <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">
+                イベント内容 <span className="text-[#475569]">（例: BBQ・納会 など）</span>
+              </label>
+              <input type="text" name="opponentCustom" placeholder="例: BBQ大会" />
             </>
           ) : (
-            <input type="text" name="opponentCustom" required={opponentRequired} placeholder="チーム名" />
+            <>
+              <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">対戦相手 *</label>
+              {opponents.length > 0 ? (
+                <>
+                  <select name="opponentSelect" required className="mb-2" defaultValue="">
+                    <option value="">── 選択してください ──</option>
+                    {opponents.map(o => <option key={o} value={o}>{o}</option>)}
+                    <option value="__custom__">その他（直接入力）...</option>
+                  </select>
+                  <input type="text" name="opponentCustom" placeholder="マスタにない場合は直接入力" className="text-sm" />
+                  <p className="text-[10px] text-[#475569] mt-1">
+                    新しいチームを追加するには<Link href="/admin/masters" className="text-[#60a5fa] ml-1 hover:underline">マスタ管理</Link>へ
+                  </p>
+                </>
+              ) : (
+                <input type="text" name="opponentCustom" required placeholder="チーム名" />
+              )}
+            </>
           )}
         </div>
 
