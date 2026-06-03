@@ -329,7 +329,7 @@ export default async function AdminSchedulePage({
             </div>
             <div className="sm:col-span-2">
               <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">メモ・備考</label>
-              <input type="text" name="note" defaultValue={editSchedule.note ?? ''} placeholder="備考・注意事項など" />
+              <textarea name="note" rows={3} defaultValue={editSchedule.note ?? ''} placeholder="備考・注意事項など（改行可）" className="w-full resize-y" />
             </div>
             <div className="sm:col-span-2">
               <button type="submit" className="btn-primary w-full py-2.5">更新する</button>
@@ -370,7 +370,7 @@ export default async function AdminSchedulePage({
             </div>
             <div className="sm:col-span-2">
               <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">メモ・備考</label>
-              <input type="text" name="note" placeholder="備考・注意事項・集合場所など" />
+              <textarea name="note" rows={3} placeholder="備考・注意事項・集合場所など（改行可）" className="w-full resize-y" />
             </div>
             <div className="sm:col-span-2">
               <button type="submit" className="btn-primary w-full py-2.5">追加する</button>

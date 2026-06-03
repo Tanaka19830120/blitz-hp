@@ -177,7 +177,7 @@ export default async function SchedulePage() {
                     </div>
 
                     {primary.note && (
-                      <p className="mt-2 text-sm text-[#94a3b8] bg-[#0d1b2a] rounded-lg px-3 py-2">
+                      <p className="mt-2 text-sm text-[#94a3b8] bg-[#0d1b2a] rounded-lg px-3 py-2 whitespace-pre-line">
                         {primary.note}
                       </p>
                     )}
