@@ -165,6 +165,7 @@ const STAT_COLS: { key: keyof BatterStats; label: string; color: string }[] = [
   { key: 'rbi',      label: '打点', color: 'text-[#94a3b8]' },
   { key: 'sb',       label: '盗塁', color: 'text-[#a78bfa]' },
   { key: 'bb',       label: '四球', color: 'text-[#60a5fa]' },
+  { key: 'hbp',      label: '死球', color: 'text-[#60a5fa]' },
 ]
 
 function playerLabel(p: PlayerOption): string {
