@@ -158,11 +158,9 @@ export default async function AdminGamePage({
 }) {
   const sp = await searchParams
 
-  const lineConfigured = !!(process.env.LINE_CHANNEL_ACCESS_TOKEN &&
-    (process.env.LINE_GROUP_ID ||
-      await prisma.setting.findUnique({ where: { key: 'detectedLineGroupId' } }).then(s => s?.value ?? '').catch(() => '')))
-
-  const [schedules, allPlayers] = await Promise.all([
+  // 独立クエリをまとめて並列実行
+  const [detectedGroupId, schedules, allPlayers] = await Promise.all([
+    prisma.setting.findUnique({ where: { key: 'detectedLineGroupId' } }).then(s => s?.value ?? '').catch(() => ''),
     prisma.schedule.findMany({
       orderBy: { date: 'desc' },
       take: 30,
@@ -171,24 +169,23 @@ export default async function AdminGamePage({
     prisma.user.findMany({ orderBy: [{ number: 'asc' }, { name: 'asc' }] }),
   ])
 
+  const lineConfigured = !!(process.env.LINE_CHANNEL_ACCESS_TOKEN &&
+    (process.env.LINE_GROUP_ID || detectedGroupId))
+
   const selectedId = sp.scheduleId ?? schedules[0]?.id
-  const selected   = selectedId
-    ? (schedules.find(s => s.id === selectedId) ??
-       await prisma.schedule.findUnique({ where: { id: selectedId } }))
-    : null
+  const inList     = selectedId ? schedules.find(s => s.id === selectedId) : undefined
 
-  const existingGame = selectedId
-    ? await prisma.game.findUnique({ where: { scheduleId: selectedId } })
-    : null
+  // selectedId に紐づく独立クエリも並列実行
+  const [selectedFallback, existingGame, lineup, ldSetting] = await Promise.all([
+    selectedId && !inList ? prisma.schedule.findUnique({ where: { id: selectedId } }) : Promise.resolve(null),
+    selectedId ? prisma.game.findUnique({ where: { scheduleId: selectedId } }) : Promise.resolve(null),
+    selectedId
+      ? prisma.lineup.findMany({ where: { scheduleId: selectedId }, include: { user: true }, orderBy: { battingOrder: 'asc' } })
+      : Promise.resolve([]),
+    selectedId ? prisma.setting.findUnique({ where: { key: `lineupData_${selectedId}` } }) : Promise.resolve(null),
+  ])
 
-  // スタメン情報（打順・守備の初期値に使用）
-  const lineup = selectedId
-    ? await prisma.lineup.findMany({
-        where:   { scheduleId: selectedId },
-        include: { user: true },
-        orderBy: { battingOrder: 'asc' },
-      })
-    : []
+  const selected = selectedId ? (inList ?? selectedFallback) : null
 
   // lineupData_${scheduleId} から打順・守備位置・選手IDをすべて取得（優先ソース）
   const positionByOrder  = new Map<number, string>()  // 前半守備
@@ -198,7 +195,6 @@ export default async function AdminGamePage({
   const lineupSubs: Array<{ order: number; userId: string; position: string }> = []
 
   if (selectedId) {
-    const ldSetting = await prisma.setting.findUnique({ where: { key: `lineupData_${selectedId}` } })
     if (ldSetting?.value) {
       try {
         const ld = JSON.parse(ldSetting.value) as {

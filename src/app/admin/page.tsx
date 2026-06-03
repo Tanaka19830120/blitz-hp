@@ -85,24 +85,23 @@ async function sendLineAttendance(scheduleId: string): Promise<void> {
 // ─────────────────────────────────────────────
 
 export default async function AdminPage() {
-  const detectedGroupId = await prisma.setting.findUnique({ where: { key: 'detectedLineGroupId' } }).then(s => s?.value ?? '').catch(() => '')
-  const lineConfigured = !!(process.env.LINE_CHANNEL_ACCESS_TOKEN && (process.env.LINE_GROUP_ID || detectedGroupId))
-
-  const [userCount, scheduleCount, gameCount] = await Promise.all([
+  const [detectedGroupId, userCount, scheduleCount, gameCount, upcomingAll] = await Promise.all([
+    prisma.setting.findUnique({ where: { key: 'detectedLineGroupId' } }).then(s => s?.value ?? '').catch(() => ''),
     prisma.user.count(),
     prisma.schedule.count(),
     prisma.game.count(),
+    prisma.schedule.findMany({
+      where:   { date: { gte: new Date() } },
+      orderBy: { date: 'asc' },
+      take:    20,
+      include: {
+        _count: { select: { attendances: true } },
+        game:   { select: { id: true } },
+      },
+    }),
   ])
 
-  const upcomingAll = await prisma.schedule.findMany({
-    where:   { date: { gte: new Date() } },
-    orderBy: { date: 'asc' },
-    take:    20,
-    include: {
-      _count: { select: { attendances: true } },
-      game:   { select: { id: true } },
-    },
-  })
+  const lineConfigured = !!(process.env.LINE_CHANNEL_ACCESS_TOKEN && (process.env.LINE_GROUP_ID || detectedGroupId))
 
   // dayGroupId でグループ化（同日複数試合を1行に）
   type ScheduleItem = typeof upcomingAll[number]
