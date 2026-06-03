@@ -1,30 +1,12 @@
 import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
-
-interface PlayerStats {
-  id: string
-  name: string
-  number: number | null
-  position: string | null
-  games: number
-  plateAppearances: number
-  atBats: number
-  hits: number
-  doubles: number
-  triples: number
-  homeRuns: number
-  rbi: number
-  runs: number
-  stolenBases: number
-  walks: number
-  strikeouts: number
-  hitByPitch: number
-  sacrificeBunts: number
-  sacrificeFlies: number
-  avg: string
-  obp: string
-  slg: string
-}
+import {
+  getBattingStats,
+  getAvailableYears,
+  getTotalGames,
+  getQualPaPerGame,
+  type PlayerStats,
+} from '@/lib/statsQueries'
 
 interface PitcherStats {
   id: string
@@ -63,83 +45,6 @@ function displayInnings(outs: number): string {
   const frac = outs % 3
   if (frac === 0) return `${full}`
   return `${full} ${frac}/3`
-}
-
-async function getStats(year?: number): Promise<PlayerStats[]> {
-  let dateFilter: { gte?: Date; lte?: Date } | undefined
-  if (year) {
-    dateFilter = {
-      gte: new Date(`${year}-01-01`),
-      lte: new Date(`${year}-12-31T23:59:59`),
-    }
-  }
-
-  const players = await prisma.user.findMany({
-    include: {
-      gameStats: {
-        include: {
-          game: {
-            include: { schedule: { select: { date: true } } },
-          },
-        },
-        ...(dateFilter
-          ? { where: { game: { schedule: { date: dateFilter } } } }
-          : {}),
-      },
-    },
-    orderBy: { name: 'asc' },
-  })
-
-  return players
-    .map((p) => {
-      const stats = p.gameStats
-      const pa = stats.reduce((s, g) => s + g.plateAppearances, 0)
-      const ab = stats.reduce((s, g) => s + g.atBats, 0)
-      const h = stats.reduce((s, g) => s + g.hits, 0)
-      const d = stats.reduce((s, g) => s + g.doubles, 0)
-      const t = stats.reduce((s, g) => s + g.triples, 0)
-      const hr = stats.reduce((s, g) => s + g.homeRuns, 0)
-      const bb = stats.reduce((s, g) => s + g.walks, 0)
-      const hbp = stats.reduce((s, g) => s + g.hitByPitch, 0)
-      const sf = stats.reduce((s, g) => s + g.sacrificeFlies, 0)
-
-      const obpDenom = ab + bb + hbp + sf
-      const obpVal = obpDenom > 0 ? (h + bb + hbp) / obpDenom : 0
-
-      const singles = h - d - t - hr
-      const slgVal = ab > 0 ? (singles + 2 * d + 3 * t + 4 * hr) / ab : 0
-
-      return {
-        id: p.id,
-        name: p.name,
-        number: p.number,
-        position: p.position,
-        games: stats.length,
-        plateAppearances: pa,
-        atBats: ab,
-        hits: h,
-        doubles: d,
-        triples: t,
-        homeRuns: hr,
-        rbi: stats.reduce((s, g) => s + g.rbi, 0),
-        runs: stats.reduce((s, g) => s + g.runs, 0),
-        stolenBases: stats.reduce((s, g) => s + g.stolenBases, 0),
-        walks: bb,
-        strikeouts: stats.reduce((s, g) => s + g.strikeouts, 0),
-        hitByPitch: hbp,
-        sacrificeBunts: stats.reduce((s, g) => s + g.sacrificeBunts, 0),
-        sacrificeFlies: sf,
-        avg: ab > 0 ? (h / ab).toFixed(3).replace('0.', '.') : '---',
-        obp: obpDenom > 0 ? obpVal.toFixed(3).replace('0.', '.') : '---',
-        slg: ab > 0 ? slgVal.toFixed(3).replace('0.', '.') : '---',
-      }
-    })
-    .filter((p) => p.games > 0)
-    .sort((a, b) => {
-      const avgA = a.atBats > 0 ? a.hits / a.atBats : 0
-      const avgB = b.atBats > 0 ? b.hits / b.atBats : 0
-      return avgB - avgA
-    })
 }
 
 async function getPitchingStats(year?: number): Promise<PitcherStats[]> {
@@ -205,39 +110,6 @@ async function getPitchingStats(year?: number): Promise<PitcherStats[]> {
     })
 }
 
-async function getAvailableYears(): Promise<number[]> {
-  const schedules = await prisma.schedule.findMany({
-    where: { game: { isNot: null } },
-    select: { date: true },
-    orderBy: { date: 'asc' },
-  })
-  const years = [...new Set(schedules.map((s) => new Date(s.date).getFullYear()))]
-  return years.sort((a, b) => b - a)
-}
-
-async function getTotalGames(year?: number): Promise<number> {
-  let dateFilter: { gte?: Date; lte?: Date } | undefined
-  if (year) {
-    dateFilter = {
-      gte: new Date(`${year}-01-01`),
-      lte: new Date(`${year}-12-31T23:59:59`),
-    }
-  }
-  return prisma.game.count({
-    where: dateFilter ? { schedule: { date: dateFilter } } : undefined,
-  })
-}
-
-async function getQualPaPerGame(): Promise<number> {
-  try {
-    const s = await prisma.setting.findUnique({ where: { key: 'qualPaPerGame' } })
-    const v = s ? parseFloat(s.value) : NaN
-    return isNaN(v) || v <= 0 ? 2.0 : v
-  } catch {
-    return 2.0
-  }
-}
-
 export default async function StatsPage({
   searchParams,
 }: {
@@ -246,14 +118,24 @@ export default async function StatsPage({
   const sp = await searchParams
   const years = await getAvailableYears()
   const currentYear = new Date().getFullYear()
-  const selectedYear = sp.year ? parseInt(sp.year) : undefined
+
+  // デフォルトは最新年。?year=all で通算、?year=2026 で特定年。
+  const isCareer = sp.year === 'all'
+  const selectedYear = isCareer
+    ? undefined
+    : sp.year
+      ? parseInt(sp.year)
+      : years[0]   // 何も指定がなければ最新年
 
   const [stats, pitchingStats, totalGames, qualPaPerGame] = await Promise.all([
-    getStats(selectedYear),
+    getBattingStats(selectedYear),
     getPitchingStats(selectedYear),
     getTotalGames(selectedYear),
     getQualPaPerGame(),
   ])
+
+  // ランキングリンクの year クエリ（通算は all、年指定はその年、デフォルトは最新年）
+  const rankYearParam = isCareer ? 'all' : selectedYear != null ? String(selectedYear) : ''
 
   // Only split into qualified/not-qualified when there are actually qualified players.
   // In career mode the threshold is very high, so everyone typically falls into notQualified
@@ -298,9 +180,9 @@ export default async function StatsPage({
       {/* Season tabs */}
       <div className="flex flex-wrap gap-2 mb-8">
         <Link
-          href="/stats"
+          href="/stats?year=all"
           className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-all ${
-            !selectedYear
+            isCareer
               ? 'bg-[#2563eb] border-[#2563eb] text-white'
               : 'border-[#1e3a5f] text-[#64748b] hover:border-[#2563eb]/50 hover:text-[#94a3b8]'
           }`}
@@ -312,7 +194,7 @@ export default async function StatsPage({
             key={year}
             href={`/stats?year=${year}`}
             className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-all ${
-              selectedYear === year
+              !isCareer && selectedYear === year
                 ? 'bg-[#2563eb] border-[#2563eb] text-white'
                 : 'border-[#1e3a5f] text-[#64748b] hover:border-[#2563eb]/50 hover:text-[#94a3b8]'
             }`}
@@ -327,13 +209,19 @@ export default async function StatsPage({
       {stats.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
           {[
-            { title: '打率', data: topAvg, key: 'avg' as const, color: 'text-[#60a5fa]' },
-            { title: '打点', data: topRbi, key: 'rbi' as const, color: 'text-[#fbbf24]' },
-            { title: '安打', data: topHits, key: 'hits' as const, color: 'text-[#22c55e]' },
-            { title: '本塁打', data: topHr, key: 'homeRuns' as const, color: 'text-[#ef4444]' },
-          ].map(({ title, data, key, color }) => (
+            { title: '打率', stat: 'avg', data: topAvg, key: 'avg' as const, color: 'text-[#60a5fa]' },
+            { title: '打点', stat: 'rbi', data: topRbi, key: 'rbi' as const, color: 'text-[#fbbf24]' },
+            { title: '安打', stat: 'hits', data: topHits, key: 'hits' as const, color: 'text-[#22c55e]' },
+            { title: '本塁打', stat: 'homeRuns', data: topHr, key: 'homeRuns' as const, color: 'text-[#ef4444]' },
+          ].map(({ title, stat, data, key, color }) => (
             <div key={title} className="glass-card rounded-xl p-4">
-              <div className="text-xs font-bold text-[#64748b] tracking-wider mb-3">{title}ランキング</div>
+              <Link
+                href={`/stats/ranking?stat=${stat}${rankYearParam ? `&year=${rankYearParam}` : ''}`}
+                className="flex items-center justify-between text-xs font-bold text-[#64748b] tracking-wider mb-3 hover:text-[#60a5fa] transition-colors group"
+              >
+                <span>{title}ランキング</span>
+                <span className="text-[#475569] group-hover:text-[#60a5fa]">全順位 ›</span>
+              </Link>
               {data.length === 0 ? (
                 <div className="text-xs text-[#475569]">—</div>
               ) : (

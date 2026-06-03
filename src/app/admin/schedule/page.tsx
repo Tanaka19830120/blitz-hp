@@ -3,9 +3,11 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
 import { getMasterList, getGameTypeLabels } from '@/lib/settings'
+import { ScheduleCreateForm } from '@/components/ScheduleCreateForm'
 
 // ─── 新規追加 ──────────────────────────────────────────────────────
-async function createSchedule(formData: FormData) {
+type CreateResult = { ok: boolean; error?: string } | null
+async function createSchedule(_prev: CreateResult, formData: FormData): Promise<CreateResult> {
   'use server'
   const date     = String(formData.get('date'))
   const dateTime = new Date(`${date}T00:00:00`)
@@ -22,11 +24,15 @@ async function createSchedule(formData: FormData) {
   const locationCustom = String(formData.get('locationCustom') || '').trim()
   const location = (locationSelect === '__custom__' ? locationCustom : locationSelect) || locationCustom
 
-  if (!opponent || !location) return
+  // イベントの場合は対戦相手なしでも可
+  if (!location) return { ok: false, error: '場所を入力してください' }
+  if (!opponent && type !== 'EVENT') return { ok: false, error: '対戦相手を選択してください' }
 
   await prisma.schedule.create({
     data: {
-      date: dateTime, opponent, location, type,
+      date: dateTime,
+      opponent: opponent || '',   // イベントで未入力なら空
+      location, type,
       meetTime:  meetTime  || null,
       startTime: startTime || null,
       note:      String(formData.get('note') || '') || null,
@@ -34,7 +40,7 @@ async function createSchedule(formData: FormData) {
   })
   revalidatePath('/schedule')
   revalidatePath('/admin')
-  redirect('/admin')
+  return { ok: true }
 }
 
 // ─── 同日に試合を追加 ──────────────────────────────────────────────
@@ -337,46 +343,14 @@ export default async function AdminSchedulePage({
           </form>
         </div>
       ) : !addToSchedule ? (
-        /* ── 新規追加フォーム ── */
-        <div className="glass-card rounded-2xl p-6 mb-8">
-          <form action={createSchedule} className="grid gap-4 sm:grid-cols-2">
-            <div className="sm:col-span-2 grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">日付 *</label>
-                <input type="date" name="date" required />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">試合種別 *</label>
-                <select name="type">
-                  {TYPES.map(t => <option key={t} value={t}>{gameTypeLabels[t] ?? t}</option>)}
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">対戦相手 *</label>
-              <OpponentSelect opponents={opponents} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">場所 *</label>
-              <LocationSelect locations={locations} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">集合時間</label>
-              <input type="time" name="meetTime" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">試合開始</label>
-              <input type="time" name="startTime" />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">メモ・備考</label>
-              <textarea name="note" rows={3} placeholder="備考・注意事項・集合場所など（改行可）" className="w-full resize-y" />
-            </div>
-            <div className="sm:col-span-2">
-              <button type="submit" className="btn-primary w-full py-2.5">追加する</button>
-            </div>
-          </form>
-        </div>
+        /* ── 新規追加フォーム（クライアント: 保存中/保存しましたトースト + イベント時は対戦相手任意） ── */
+        <ScheduleCreateForm
+          opponents={opponents}
+          locations={locations}
+          types={TYPES}
+          typeLabels={gameTypeLabels}
+          action={createSchedule}
+        />
       ) : null}
 
       {/* ── 登録済み日程一覧 ── */}
@@ -391,7 +365,7 @@ export default async function AdminSchedulePage({
             } ${s.id === editId ? 'border border-[#f59e0b]/40' : ''}`}>
             {/* 上段: 試合情報 */}
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mb-1.5">
-              <span className="text-sm font-medium text-[#e2e8f0]">vs {s.opponent}</span>
+              <span className="text-sm font-medium text-[#e2e8f0]">{s.opponent ? `vs ${s.opponent}` : 'イベント'}</span>
               <span className="text-xs text-[#64748b]">
                 {new Date(s.date).toLocaleDateString('ja-JP', { year: 'numeric', month: 'short', day: 'numeric' })}
               </span>

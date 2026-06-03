@@ -154,7 +154,7 @@ export default async function SchedulePage() {
                             <div className="flex flex-wrap items-center gap-x-2">
                               <span className="text-xs text-[#64748b] shrink-0">第{i + 1}試合</span>
                               <span className="text-lg font-bold leading-tight">
-                                vs <span className="text-[#fbbf24]">{s.opponent}</span>
+                                {s.opponent ? <>vs <span className="text-[#fbbf24]">{s.opponent}</span></> : <span className="text-[#a78bfa]">イベント</span>}
                               </span>
                             </div>
                             <div className="flex flex-wrap gap-x-3 text-xs text-[#64748b]">
@@ -166,7 +166,7 @@ export default async function SchedulePage() {
                       </div>
                     ) : (
                       <div className="text-xl font-bold mb-2">
-                        vs <span className="text-[#fbbf24]">{primary.opponent}</span>
+                        {primary.opponent ? <>vs <span className="text-[#fbbf24]">{primary.opponent}</span></> : <span className="text-[#a78bfa]">イベント</span>}
                       </div>
                     )}
 
