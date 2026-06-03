@@ -13,17 +13,15 @@ function fmtDate(d: Date) {
   return new Date(d).toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' })
 }
 
-// ── 写真削除（投稿者本人 or 管理者） ──
+// ── 写真削除（管理者のみ） ──
 async function deletePhoto(formData: FormData) {
   'use server'
   const session = await auth()
-  if (!session?.user?.id) return
+  if ((session?.user as { role?: string })?.role !== 'ADMIN') return
   const id = String(formData.get('id'))
   const albumId = String(formData.get('albumId'))
   const photo = await prisma.photo.findUnique({ where: { id } })
   if (!photo) return
-  const isAdmin = (session.user as { role?: string }).role === 'ADMIN'
-  if (!isAdmin && photo.uploadedById !== session.user.id) return
   await prisma.photo.delete({ where: { id } })
   revalidatePath(`/album/${albumId}`)
   redirect(`/album/${albumId}?toast=${encodeURIComponent('写真を削除しました')}`)
@@ -42,7 +40,6 @@ export default async function AlbumDetailPage({ params }: { params: Promise<{ id
     )
   }
   const isAdmin = (session.user as { role?: string }).role === 'ADMIN'
-  const myId = session.user.id
 
   const album = await prisma.photoAlbum.findUnique({
     where: { id },
@@ -79,7 +76,7 @@ export default async function AlbumDetailPage({ params }: { params: Promise<{ id
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
           {album.photos.map((p) => {
-            const canDelete = isAdmin || p.uploadedById === myId
+            const canDelete = isAdmin
             return (
               <div key={p.id} className="relative group glass-card rounded-xl overflow-hidden">
                 <a href={p.url} target="_blank" rel="noopener noreferrer" className="block aspect-square bg-[#0d1b2a]">
