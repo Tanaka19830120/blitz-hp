@@ -199,6 +199,13 @@ export default async function AdminPage() {
               <div className="text-xs text-[#64748b]">チーム紹介ページの編集</div>
             </div>
           </Link>
+          <Link href="/admin/help" className="glass-card rounded-xl p-5 hover:border-[#2563eb]/40 transition-all flex items-center gap-4">
+            <div className="w-10 h-10 rounded-lg bg-[#d97706]/20 flex items-center justify-center text-[#fbbf24] text-xl">🛠</div>
+            <div>
+              <div className="font-semibold text-[#e2e8f0]">管理者ガイド</div>
+              <div className="text-xs text-[#64748b]">操作手順・使い方</div>
+            </div>
+          </Link>
         </div>
       </div>
 

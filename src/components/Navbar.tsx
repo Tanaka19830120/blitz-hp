@@ -14,6 +14,7 @@ const navLinks = [
   { href: '/album', label: '写真' },
   { href: '/members', label: 'メンバー' },
   { href: '/profile', label: 'チームプロフィール' },
+  { href: '/help', label: '使い方' },
   { href: '/contact', label: 'お問い合わせ' },
 ]
 
