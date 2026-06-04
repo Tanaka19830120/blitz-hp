@@ -3,7 +3,6 @@ import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
 import { sendToLineGroup, buildGameResult } from '@/lib/line'
 import { ScoreBookEditor } from '@/components/ScoreBookEditor'
-import { ScorePhotoUploader } from '@/components/ScorePhotoUploader'
 import { calcBatterStats, type ScoreBookData, type BatterSub } from '@/lib/scorebook'
 
 // ─── 統合サーバーアクション ────────────────────────────────────────────────
@@ -418,22 +417,7 @@ export default async function AdminGamePage({
                   opponent: selected.opponent,
                 }}
               />
-
-              {/* スコア表写真（保存済みゲームがある場合のみ表示） */}
-              {existingGame && (
-                <div className="mt-6 border-t border-[#1e3a5f] pt-6">
-                  <ScorePhotoUploader
-                    scheduleId={selected.id}
-                    currentPhotoUrl={existingGame.scorePhoto ?? null}
-                    savePhotoAction={saveScorePhoto}
-                  />
-                </div>
-              )}
-              {!existingGame && (
-                <p className="mt-4 text-xs text-[#475569] text-center">
-                  💡 スコアを保存すると写真アップロードが可能になります
-                </p>
-              )}
+              {/* スコア表写真の手動取込は廃止。「シートから読み込み」時に自動でスコア写真として登録される */}
             </div>
           )}
         </>
