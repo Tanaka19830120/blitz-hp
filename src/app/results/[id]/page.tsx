@@ -276,7 +276,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
               </thead>
               <tbody>
                 {bookRows.map((r, idx) => (
-                  <tr key={r.order} className={`border-b border-[#0f2035]/60 ${idx % 2 === 0 ? '' : 'bg-[#0a1628]/20'}`}>
+                  <tr key={r.order} className={`border-b border-[#0f2035]/40 ${idx % 2 === 0 ? '' : 'bg-white/[0.045]'}`}>
                     <td className="py-1.5 pr-1 text-center text-[#64748b]">{r.order}</td>
                     <td className="py-1.5 px-2">
                       {r.userId ? (
@@ -367,6 +367,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
                 <tr className="text-xs text-[#64748b] border-b border-[#1e3a5f]">
                   <th className="py-2 pr-1 text-center w-6">#</th>
                   <th className="py-2 px-2 text-left">選手</th>
+                  <th className="py-2 px-2 text-center w-10 hidden sm:table-cell">守備</th>
                   <th className="py-2 px-2 text-center w-10">打席</th>
                   <th className="py-2 px-2 text-center w-10">打数</th>
                   <th className="py-2 px-2 text-center w-10">安打</th>
@@ -382,7 +383,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
               </thead>
               <tbody>
                 {game.stats.map((s, i) => (
-                  <tr key={s.id} className={`border-b border-[#0f2035]/60 ${i % 2 === 0 ? '' : 'bg-[#0a1628]/20'}`}>
+                  <tr key={s.id} className={`border-b border-[#0f2035]/40 ${i % 2 === 0 ? '' : 'bg-white/[0.045]'}`}>
                     <td className="py-2 pr-1 text-center text-[#64748b] text-xs">{s.battingOrder ?? '–'}</td>
                     <td className="py-2 px-2">
                       {s.user.isGuest ? (
@@ -399,6 +400,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
                         </Link>
                       )}
                     </td>
+                    <td className="py-2 px-2 text-center text-[#64748b] text-xs hidden sm:table-cell">{s.position ?? '–'}</td>
                     <td className="py-2 px-2 text-center text-[#94a3b8]">{s.plateAppearances || 0}</td>
                     <td className="py-2 px-2 text-center text-[#94a3b8]">{s.atBats}</td>
                     <td className="py-2 px-2 text-center font-bold text-[#e2e8f0]">{s.hits}</td>
@@ -446,7 +448,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
             </thead>
             <tbody>
               {game.pitchingStats.map((p, i) => (
-                <tr key={p.id} className={`border-b border-[#0f2035]/60 hover:bg-[#1e3a5f]/10 ${i % 2 === 0 ? '' : 'bg-[#0a1628]/20'}`}>
+                <tr key={p.id} className={`border-b border-[#0f2035]/40 hover:bg-[#1e3a5f]/10 ${i % 2 === 0 ? '' : 'bg-white/[0.045]'}`}>
                   <td className="py-2 px-2">
                     {p.user.isGuest ? (
                       <div className="flex items-center gap-2">

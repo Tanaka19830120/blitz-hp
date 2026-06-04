@@ -134,61 +134,6 @@ export default async function HomePage() {
               </div>
             </div>
 
-            {/* Right: scoreboard stats */}
-            {total > 0 && (
-              <div className="flex justify-center lg:justify-end">
-                <div className="w-full max-w-xs">
-                  {/* Scoreboard header */}
-                  <div
-                    className="rounded-t-2xl px-5 py-3 flex items-center justify-between"
-                    style={{ background: 'linear-gradient(135deg, #1d4ed8, #1e3a5f)' }}
-                  >
-                    <span className="text-xs font-bold tracking-[0.3em] text-white/80 uppercase">Season Record</span>
-                    <span className="text-xs text-[#60a5fa] font-mono">{total}G</span>
-                  </div>
-                  {/* Score rows */}
-                  <div className="rounded-b-2xl overflow-hidden border border-[#1e3a5f] border-t-0">
-                    {[
-                      { label: 'WIN', value: wins, color: '#22c55e', bg: 'rgba(34,197,94,0.08)', bar: wins / total },
-                      { label: 'LOSE', value: losses, color: '#ef4444', bg: 'rgba(239,68,68,0.08)', bar: losses / total },
-                      { label: 'DRAW', value: draws, color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', bar: draws / total },
-                    ].map(({ label, value, color, bg, bar }) => (
-                      <div key={label} className="relative px-5 py-4 border-b border-[#1e3a5f] last:border-0" style={{ background: bg }}>
-                        {/* Progress bar */}
-                        <div
-                          className="absolute left-0 top-0 bottom-0 opacity-20"
-                          style={{ width: `${bar * 100}%`, background: color }}
-                        />
-                        <div className="relative flex items-center justify-between">
-                          <span className="text-xs font-bold tracking-[0.3em]" style={{ color }}>{label}</span>
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-4xl font-black" style={{ color }}>{value}</span>
-                            <span className="text-xs text-[#475569]">
-                              {total > 0 ? Math.round(value / total * 100) : 0}%
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    {/* Win rate */}
-                    <div className="px-5 py-3 bg-[#0d1b2a]/80 flex items-center justify-between">
-                      <span className="text-xs text-[#64748b] tracking-widest">WIN RATE</span>
-                      <span
-                        className="text-xl font-black"
-                        style={{
-                          background: 'linear-gradient(135deg, #22c55e, #60a5fa)',
-                          WebkitBackgroundClip: 'text',
-                          WebkitTextFillColor: 'transparent',
-                          backgroundClip: 'text',
-                        }}
-                      >
-                        {total > 0 ? (wins / total * 100).toFixed(1) : '0.0'}%
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </section>

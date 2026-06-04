@@ -295,8 +295,8 @@ export default async function StatsPage({
                             {players.map((p, i) => (
                               <tr
                                 key={p.id}
-                                className={`border-b border-[#0d1b2a] hover:bg-[#0d1b2a]/50 transition-colors ${
-                                  !muted && i === 0 ? 'bg-[#1a2744]/30' : ''
+                                className={`border-b border-[#0d1b2a]/40 hover:bg-[#0d1b2a]/50 transition-colors ${
+                                  !muted && i === 0 ? 'bg-[#1a2744]/30' : i % 2 === 1 ? 'bg-white/[0.03]' : ''
                                 } ${muted ? 'opacity-75' : ''}`}
                               >
                                 <td className="px-4 py-3">
