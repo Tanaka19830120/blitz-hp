@@ -436,8 +436,9 @@ export default async function AdminGamePage({
                 </Link>
               </div>
 
-              {/* ← ScoreBookEditor が全て統合 */}
+              {/* ← ScoreBookEditor が全て統合。key で試合切替時に再マウント（入力内容の引き継ぎ防止） */}
               <ScoreBookEditor
+                key={selected.id}
                 players={sortedPlayers.map(p => ({
                   id:     p.id,
                   name:   p.name,
