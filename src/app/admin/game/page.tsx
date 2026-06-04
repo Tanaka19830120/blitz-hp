@@ -177,7 +177,7 @@ export default async function AdminGamePage({
   // selectedId に紐づく独立クエリも並列実行
   const [selectedFallback, existingGame, lineup, ldSetting] = await Promise.all([
     selectedId && !inList ? prisma.schedule.findUnique({ where: { id: selectedId } }) : Promise.resolve(null),
-    selectedId ? prisma.game.findUnique({ where: { scheduleId: selectedId } }) : Promise.resolve(null),
+    selectedId ? prisma.game.findUnique({ where: { scheduleId: selectedId }, include: { stats: { orderBy: { battingOrder: 'asc' } } } }) : Promise.resolve(null),
     selectedId
       ? prisma.lineup.findMany({ where: { scheduleId: selectedId }, include: { user: true }, orderBy: { battingOrder: 'asc' } })
       : Promise.resolve([]),
@@ -286,6 +286,40 @@ export default async function AdminGamePage({
       ourScore:      existingGame?.ourScore      ?? null,
       opponentScore: existingGame?.opponentScore ?? null,
       note:          existingGame?.note          ?? '',
+    }
+
+    // スタメン未登録 & スコアブック無し だが、既存の成績(GameStat)がある場合は
+    // 打順・守備・選手をそこからプリセット（teams.one 取込試合など）
+    const hasLineupData = lineupForBook.some(l => l.userId)
+    const importedStats = existingGame?.stats ?? []
+    if (!hasLineupData && importedStats.length > 0) {
+      // 打順ごとに先発（最初の1人）を採用し、それ以外は交代(sub)として保持
+      const byOrder = new Map<number, typeof importedStats>()
+      for (const s of importedStats) {
+        const ord = s.battingOrder ?? 0
+        if (ord < 1 || ord > 9) continue
+        if (!byOrder.has(ord)) byOrder.set(ord, [])
+        byOrder.get(ord)!.push(s)
+      }
+      const batters = Array.from({ length: 9 }, (_, i) => {
+        const ord = i + 1
+        const list = byOrder.get(ord) ?? []
+        const starter = list[0]
+        const subs = list.slice(1).map(s => ({
+          fromInning: Math.max(1, Math.ceil((initialScoreBook.innings ?? 7) / 2)),
+          userId:   s.userId,
+          position: s.position ?? '',
+          cells:    {} as Record<number, string>,
+        }))
+        return {
+          order:    ord,
+          userId:   starter?.userId ?? '',
+          position: starter?.position ?? '',
+          cells:    {} as Record<number, string>,
+          ...(subs.length > 0 ? { subs } : {}),
+        }
+      })
+      initialScoreBook = { ...initialScoreBook, batters }
     }
   }
 
