@@ -61,7 +61,7 @@ export default async function AdminSettingsPage({
     <div className="pt-16 max-w-2xl mx-auto px-4 py-12">
       <div className="flex items-center gap-4 mb-8">
         <Link href="/admin" className="text-[#64748b] hover:text-[#94a3b8]">← 管理</Link>
-        <h1 className="text-2xl font-black text-[#e2e8f0]">成績設定</h1>
+        <h1 className="text-2xl font-black text-[#e2e8f0]">設定</h1>
       </div>
 
       <div className="glass-card rounded-2xl p-6 mb-4">
@@ -128,7 +128,7 @@ export default async function AdminSettingsPage({
       </div>
 
       {/* 問い合わせ配信先 */}
-      <div className="glass-card rounded-2xl p-6">
+      <div id="contact" className="glass-card rounded-2xl p-6 scroll-mt-20">
         <h2 className="text-sm font-bold text-[#60a5fa] mb-1">問い合わせの配信先メール</h2>
         <p className="text-xs text-[#64748b] mb-3 leading-relaxed">
           お問い合わせフォームの内容を送るメールアドレス。<br />
