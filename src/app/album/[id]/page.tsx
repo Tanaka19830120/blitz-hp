@@ -87,6 +87,11 @@ export default async function AlbumDetailPage({ params }: { params: Promise<{ id
                   <img src={p.url} alt="" loading="lazy"
                     className="w-full h-full object-cover group-hover:opacity-90 transition-opacity" />
                 </a>
+                {p.uploadedBy?.name && (
+                  <div className="absolute bottom-0 left-0 right-0 px-2 py-1 bg-gradient-to-t from-black/70 to-transparent">
+                    <span className="text-[10px] text-white/90">📷 {p.uploadedBy.name}</span>
+                  </div>
+                )}
                 {canDelete && (
                   <form action={deletePhoto} className="absolute top-1.5 right-1.5">
                     <input type="hidden" name="id" value={p.id} />
