@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
+import Image from 'next/image'
 import { sendToLineGroup, buildGameResult } from '@/lib/line'
 import { ScoreBookEditor } from '@/components/ScoreBookEditor'
 import { calcBatterStats, type ScoreBookData, type BatterSub } from '@/lib/scorebook'
@@ -455,6 +456,24 @@ export default async function AdminGamePage({
                 }}
               />
               {/* スコア表写真の手動取込は廃止。「シートから読み込み」時に自動でスコア写真として登録される */}
+
+              {/* 取り込んだスコアシート写真（管理者のみ閲覧） */}
+              {existingGame?.scorePhoto && (
+                <div className="mt-6 border-t border-[#1e3a5f] pt-6">
+                  <h3 className="text-xs font-bold text-[#94a3b8] tracking-widest uppercase mb-3">取り込んだスコアシート</h3>
+                  <a href={existingGame.scorePhoto} target="_blank" rel="noopener noreferrer" className="block max-w-2xl">
+                    <Image
+                      src={existingGame.scorePhoto}
+                      alt="スコアシート"
+                      width={1200}
+                      height={900}
+                      sizes="(max-width: 768px) 100vw, 768px"
+                      className="w-full h-auto rounded-xl border border-[#1e3a5f] bg-[#0d1b2a]"
+                    />
+                  </a>
+                  <p className="text-[10px] text-[#475569] mt-2">タップで原寸表示</p>
+                </div>
+              )}
             </div>
           )}
         </>
