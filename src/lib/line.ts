@@ -54,6 +54,55 @@ export async function sendTextsToLineGroup(texts: string[]): Promise<{ ok: boole
   }
 }
 
+/** 個別ユーザー（友だち追加済み）へ順次プッシュ送信 */
+export async function pushToLineUsers(userIds: string[], text: string): Promise<{ ok: boolean; error?: string }> {
+  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN
+  if (!token) return { ok: false, error: 'LINE_CHANNEL_ACCESS_TOKEN が未設定です' }
+  if (userIds.length === 0) return { ok: false, error: '通知先が登録されていません' }
+  try {
+    for (const to of userIds) {
+      const res = await fetch(LINE_PUSH_API, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, messages: [{ type: 'text', text }] }),
+      })
+      if (!res.ok) return { ok: false, error: `LINE API ${res.status}: ${await res.text()}` }
+    }
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: String(e) }
+  }
+}
+
+/** LINE ユーザーの表示名を取得 */
+export async function getLineProfileName(userId: string): Promise<string | null> {
+  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN
+  if (!token) return null
+  try {
+    const res = await fetch(`https://api.line.me/v2/bot/profile/${userId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) return null
+    const j = await res.json()
+    return (j.displayName as string) ?? null
+  } catch {
+    return null
+  }
+}
+
+/** reply token で返信 */
+export async function replyLine(replyToken: string, text: string): Promise<void> {
+  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN
+  if (!token) return
+  try {
+    await fetch('https://api.line.me/v2/bot/message/reply', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ replyToken, messages: [{ type: 'text', text }] }),
+    })
+  } catch { /* ignore */ }
+}
+
 // ─── メッセージ整形 ────────────────────────────
 
 function fmt(date: Date) {

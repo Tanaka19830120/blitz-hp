@@ -134,3 +134,31 @@ export async function getContactRecipients(): Promise<string[]> {
     return []
   }
 }
+
+// ── 問い合わせ通知先(LINE個人) ──
+export interface LineContact { userId: string; name: string }
+
+/** ボットに「登録」した管理者の一覧 */
+export async function getLineContacts(): Promise<LineContact[]> {
+  try {
+    const s = await prisma.setting.findUnique({ where: { key: 'lineContacts' } })
+    return s?.value ? (JSON.parse(s.value) as LineContact[]) : []
+  } catch {
+    return []
+  }
+}
+
+/** 問い合わせ通知を受け取る userId 一覧（選択が無ければ登録者全員） */
+export async function getLineContactRecipients(): Promise<string[]> {
+  try {
+    const [selSetting, contacts] = await Promise.all([
+      prisma.setting.findUnique({ where: { key: 'lineContactRecipients' } }),
+      getLineContacts(),
+    ])
+    const selected: string[] = selSetting?.value ? JSON.parse(selSetting.value) : []
+    if (selected.length > 0) return selected
+    return contacts.map(c => c.userId)
+  } catch {
+    return []
+  }
+}

@@ -200,10 +200,10 @@ export default async function AdminPage() {
             </div>
           </Link>
           <Link href="/admin/contact" className="glass-card rounded-xl p-5 hover:border-[#2563eb]/40 transition-all flex items-center gap-4">
-            <div className="w-10 h-10 rounded-lg bg-[#1d4ed8]/20 flex items-center justify-center text-[#60a5fa] text-xl">✉️</div>
+            <div className="w-10 h-10 rounded-lg bg-[#16a34a]/20 flex items-center justify-center text-[#22c55e] text-xl">📨</div>
             <div>
-              <div className="font-semibold text-[#e2e8f0]">問い合わせ配信先</div>
-              <div className="text-xs text-[#64748b]">通知メールアドレスを登録</div>
+              <div className="font-semibold text-[#e2e8f0]">問い合わせ通知先</div>
+              <div className="text-xs text-[#64748b]">LINEで受け取る人を設定</div>
             </div>
           </Link>
           <Link href="/admin/help" className="glass-card rounded-xl p-5 hover:border-[#2563eb]/40 transition-all flex items-center gap-4">
