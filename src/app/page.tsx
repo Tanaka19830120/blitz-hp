@@ -50,10 +50,11 @@ export default async function HomePage() {
         {/* AI-generated softball action photo background */}
         <div className="absolute inset-0">
           <Image
-            src="/hero-softball.jpg"
+            src="/hero-softball.png"
             alt="BLITZ softball action"
             fill
             priority
+            sizes="100vw"
             className="object-cover object-center"
           />
           {/* Dark overlay gradient — left side darker for text, right shows image */}
