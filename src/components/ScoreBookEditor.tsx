@@ -172,6 +172,19 @@ function playerLabel(p: PlayerOption): string {
   return (p.number != null ? `#${p.number} ` : '') + (p.name || '(未設定)')
 }
 
+/** スコアブック(打点)から各イニングのBLITZ得点を算出。打席のあったイニングは0でも数値、無ければnull */
+function deriveInningRbis(batters: BatterSlot[], innings: number): (number | null)[] {
+  const arr: (number | null)[] = Array(innings).fill(null)
+  for (const b of batters) {
+    for (const [innStr, code] of Object.entries(b.cells)) {
+      const inn = parseInt(innStr)
+      if (inn < 1 || inn > innings || !code) continue
+      arr[inn - 1] = (arr[inn - 1] ?? 0) + calcBatterStats({ 0: code }).rbi
+    }
+  }
+  return arr
+}
+
 export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, savePhotoAction, lineConfigured, scheduleInfo }: Props) {
   // デバッグ: scheduleInfo 確認
   /* ── スコア ── */
@@ -185,7 +198,10 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
   const [pitchers, setPitchers] = useState<PitcherSlot[]>(initialData.pitchers)
 
   /* ── イニングスコア ── */
-  // BLITZ はスコアブックからライブ計算（ourInningScores）。相手のみ手入力。
+  // BLITZ は OCR(打点)の読み取り結果を初期値とし、人間が手修正できる（エラー得点等に対応）。
+  const [ourInnings, setOurInnings] = useState<(number | null)[]>(
+    initialData.inningScores?.our ?? deriveInningRbis(initialData.batters, initialData.innings)
+  )
   const [opponentInnings, setOpponentInnings] = useState<(number | null)[]>(
     initialData.inningScores?.opponent ?? Array(initialData.innings).fill(null)
   )
@@ -193,23 +209,10 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
   const [isPending, startTransition] = useTransition()
   const [status, setStatus] = useState<'idle' | 'saved' | 'error'>('idle')
 
-  // ── BLITZ のイニングスコアはスコアブック(打撃成績)からライブ計算 ──
-  // 各イニングの打点合計。打席のあったイニングは 0 でも数値、無ければ null(空欄)
-  const ourInningScores: (number | null)[] = (() => {
-    const arr: (number | null)[] = Array(initialData.innings).fill(null)
-    for (const b of batters) {
-      for (const [innStr, code] of Object.entries(b.cells)) {
-        const inn = parseInt(innStr)
-        if (inn < 1 || inn > initialData.innings || !code) continue
-        arr[inn - 1] = (arr[inn - 1] ?? 0) + calcBatterStats({ 0: code }).rbi
-      }
-    }
-    return arr
-  })()
-  const ourScoreTotal = ourInningScores.reduce((sum: number, n) => sum + (n ?? 0), 0)
+  const ourScoreTotal = ourInnings.reduce((sum: number, n) => sum + (n ?? 0), 0)
   const opponentScoreTotal = opponentInnings.reduce((sum: number, n) => sum + (n ?? 0), 0)
 
-  // BLITZ 得点（打点合計）
+  // BLITZ 得点（イニング合計）
   const ourRbiTotal = ourScoreTotal
 
   // 先攻・後攻の表示順入れ替え（true なら相手チームを上に表示）
@@ -377,7 +380,17 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
         return { ...b, cells: Object.fromEntries(Object.entries(extracted).filter(([, v]) => v)) }
       }))
       addLog(`[STEP 7] 打者データ更新完了`)
-      // BLITZ のイニングスコアは打者データ(b.cells)からライブ計算されるため自動反映される
+
+      // BLITZ のイニングスコアを読み取った打点で初期反映（以降は手修正可能）
+      const inningRbi: (number | null)[] = Array(innings).fill(null)
+      for (const innMap of Object.values(batterCells)) {
+        for (const [innStr, code] of Object.entries(innMap)) {
+          const inn = parseInt(innStr)
+          if (inn < 1 || inn > innings || !code) continue
+          inningRbi[inn - 1] = (inningRbi[inn - 1] ?? 0) + calcBatterStats({ 0: code }).rbi
+        }
+      }
+      setOurInnings(inningRbi)
 
       const cellCount = Object.values(batterCells).reduce((n, r) => n + Object.keys(r).length, 0)
       addLog(`[STEP 8] 完了: ${cellCount}セル読み込み成功`)
@@ -618,7 +631,7 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
       ourScore:      ourRbiTotal || null,
       opponentScore: opponentScoreTotal || null,
       inningScores: {
-        our:      Array.from({ length: innings }, (_, i) => ourInningScores[i] ?? null),
+        our:      Array.from({ length: innings }, (_, i) => ourInnings[i] ?? null),
         opponent: Array.from({ length: innings }, (_, i) => opponentInnings[i] ?? null),
       },
       note,
@@ -705,7 +718,8 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
 
       {/* ━━━━ INNING SCORES ━━━━ */}
       <div>
-        <h3 className="text-xs font-bold text-[#94a3b8] tracking-widest uppercase mb-2">イニングスコア</h3>
+        <h3 className="text-xs font-bold text-[#94a3b8] tracking-widest uppercase mb-1">イニングスコア</h3>
+        <p className="text-[10px] text-[#475569] mb-2">BLITZ は読み取った打点を初期表示します。エラー等で打点の付かない得点があれば直接修正してください。</p>
         <div className="overflow-x-auto">
           <table className="text-xs border-collapse">
             <thead>
@@ -725,8 +739,8 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
                   key: 'our',
                   label: 'BLITZ',
                   color: '#60a5fa',
-                  innings: ourInningScores,
-                  setInnings: null,                 // BLITZ はスコアブックから自動計算（読み取り専用）
+                  innings: ourInnings,
+                  setInnings: setOurInnings,         // OCR値を初期反映しつつ手修正可能
                   total: ourScoreTotal,
                 }
                 const oppRow = {
