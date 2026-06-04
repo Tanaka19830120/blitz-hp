@@ -103,10 +103,16 @@ export default async function AdminMembersPage({
   const sp = await searchParams
   const editId = sp.edit
 
-  const members = await prisma.user.findMany({
+  const allUsers = await prisma.user.findMany({
     orderBy: [{ role: 'asc' }, { number: 'asc' }, { name: 'asc' }],
-    select: { id: true, name: true, email: true, number: true, position: true, role: true, photoUrl: true },
+    select: { id: true, name: true, email: true, number: true, position: true, role: true, photoUrl: true, isGuest: true },
   })
+
+  // 表示優先度: 現メンバー(@bログイン) → 元メンバー(取込・脱退) → 助っ人
+  // 現メンバー = 正式ログインアカウント(email が @b)かつ助っ人でない
+  const tier = (m: typeof allUsers[number]) =>
+    m.isGuest ? 2 : (m.email.endsWith('@b') ? 0 : 1)
+  const members = [...allUsers].sort((a, b) => tier(a) - tier(b))  // 同tier内は元の並び維持
 
   const editMember = editId ? members.find((m) => m.id === editId) : null
 
@@ -237,6 +243,8 @@ export default async function AdminMembersPage({
                 <div className="font-medium text-[#e2e8f0] flex items-center gap-2">
                   {m.name}
                   {m.role === 'ADMIN' && <span className="text-xs text-[#fbbf24]">管理者</span>}
+                  {m.isGuest && <span className="text-[10px] text-[#a78bfa] border border-[#a78bfa]/40 rounded px-1">助っ人</span>}
+                  {!m.isGuest && !m.email.endsWith('@b') && <span className="text-[10px] text-[#64748b] border border-[#334155] rounded px-1">元メンバー</span>}
                 </div>
                 <div className="text-xs text-[#64748b] truncate">{m.email}</div>
               </div>
