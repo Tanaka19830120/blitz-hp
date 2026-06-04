@@ -745,7 +745,7 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
                       <td key={i + 1} className="py-0.5 px-0.5">
                         {row.setInnings ? (
                           <input
-                            type="number" min={0} max={9}
+                            type="number" min={0}
                             value={row.innings[i] ?? ''}
                             onChange={e => {
                               const v = e.target.value === '' ? null : parseInt(e.target.value)

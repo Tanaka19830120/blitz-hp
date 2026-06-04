@@ -79,6 +79,12 @@ const PCOL = {
   runsAllowed: 5, earnedRuns: 6, hitsAllowed: 7, strikeouts: 8, walks: 9,
 }
 
+// teams.one の別表記 → 既存メンバー（同一人物）の対応表
+// teams.one 上の名前（正規化前）→ 既存メンバーの「名前 or 背番号」で特定
+const MEMBER_ALIASES: { aliases: string[]; matchName?: string; matchNumber?: number }[] = [
+  { aliases: ['りゅうせい', 'リュウセイ'], matchName: 'RYUSEI' },
+]
+
 function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
@@ -254,6 +260,17 @@ async function main() {
    *  2. 正規化名 → 空白・大小文字の違いを吸収
    *  3. 元の名前（そのまま）
    */
+  // 別表記エイリアスを既存メンバーに対応付け
+  for (const al of MEMBER_ALIASES) {
+    const target = users.find(u =>
+      (al.matchNumber != null && u.number === al.matchNumber) ||
+      (al.matchName != null && normName(u.name) === normName(al.matchName))
+    )
+    if (target) {
+      for (const a of al.aliases) nameToUserId[normName(a)] = target.id
+    }
+  }
+
   function resolveUserId(name: string, jerseyNumber: string): string | undefined {
     // 1. 背番号（"-" や空白はスキップ）
     const num = parseInt(jerseyNumber, 10)
@@ -266,6 +283,30 @@ async function main() {
     if (byNorm) return byNorm
     // 3. そのまま
     return nameToUserId[name.trim()]
+  }
+
+  // 未一致の選手は助っ人(isGuest)として作成・再利用
+  const guestCache = new Map<string, string>()  // normName → userId
+  const createdGuests = new Set<string>()
+  async function getOrCreateGuestId(name: string): Promise<string | undefined> {
+    const key = normName(name)
+    if (!key) return undefined
+    if (guestCache.has(key)) return guestCache.get(key)
+    let g = await prisma.user.findFirst({ where: { name: name.trim(), isGuest: true } })
+    if (!g) {
+      g = await prisma.user.create({
+        data: {
+          name: name.trim(),
+          email: `guest_${key.replace(/[^a-z0-9]/g, '')}_${Date.now()}@guest`,
+          password: 'x',
+          role: 'PLAYER',
+          isGuest: true,
+        },
+      })
+      createdGuests.add(name.trim())
+    }
+    guestCache.set(key, g.id)
+    return g.id
   }
 
   // 日付+対戦相手 → Game マップ
@@ -284,7 +325,7 @@ async function main() {
       where:   { teamsOneId: String(teamsOneId) },
       include: { schedule: true },
     })
-    if (existing) {
+    if (existing && !process.env.RESCAN) {
       const existingPitching = await prisma.pitchingStat.findFirst({ where: { gameId: existing.id } })
       if (existingPitching) {
         process.stdout.write(`[スキップ] ${teamsOneId}\r`)
@@ -357,10 +398,12 @@ async function main() {
       const unmatchedBatters: string[] = []
 
       for (const stat of batting) {
-        const userId = resolveUserId(stat.name, stat.number)
+        let userId = resolveUserId(stat.name, stat.number)
         if (!userId) {
-          if (stat.name) unmatchedBatters.push(`"${stat.name}"(${stat.number})`)
-          continue
+          // 未一致 → 助っ人として登録（名前があるもののみ）
+          userId = await getOrCreateGuestId(stat.name)
+          if (!userId) continue
+          if (stat.name) unmatchedBatters.push(`"${stat.name}"(${stat.number})→助っ人`)
         }
 
         try {
@@ -420,10 +463,11 @@ async function main() {
       const unmatchedPitchers: string[] = []
 
       for (const p of pitching) {
-        const userId = resolveUserId(p.name, p.number)
+        let userId = resolveUserId(p.name, p.number)
         if (!userId) {
-          if (p.name) unmatchedPitchers.push(`"${p.name}"(${p.number})`)
-          continue
+          userId = await getOrCreateGuestId(p.name)
+          if (!userId) continue
+          if (p.name) unmatchedPitchers.push(`"${p.name}"(${p.number})→助っ人`)
         }
 
         try {
@@ -474,6 +518,11 @@ async function main() {
 
   console.log(`\n=== 完了 ===`)
   console.log(`成功: ${success}, スキップ: ${skipped}, 失敗: ${failed}`)
+  if (createdGuests.size > 0) {
+    console.log(`\n=== 新規作成した助っ人 (${createdGuests.size}名) ===`)
+    console.log([...createdGuests].join(', '))
+    console.log('※ この中に実際はメンバー（別表記）がいれば MEMBER_ALIASES に追加して再実行してください')
+  }
 }
 
 main()
