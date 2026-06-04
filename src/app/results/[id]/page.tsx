@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
+import Image from 'next/image'
 import { notFound } from 'next/navigation'
 import { calcBatterStats, cellColor, codeToJa, type ScoreBookData, type BatterStats } from '@/lib/scorebook'
 
@@ -494,6 +495,24 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
       {game.note && (
         <div className="glass-card rounded-2xl p-4 mb-6 text-sm text-[#94a3b8]">
           📝 {game.note}
+        </div>
+      )}
+
+      {/* スコアシート写真（取り込んだ画像。next/imageで圧縮配信） */}
+      {game.scorePhoto && (
+        <div className="glass-card rounded-2xl p-4 mb-6">
+          <h2 className="text-sm font-bold text-[#94a3b8] uppercase tracking-wider mb-3">スコアシート</h2>
+          <a href={game.scorePhoto} target="_blank" rel="noopener noreferrer" className="block">
+            <Image
+              src={game.scorePhoto}
+              alt="スコアシート"
+              width={1200}
+              height={900}
+              sizes="(max-width: 768px) 100vw, 768px"
+              className="w-full h-auto rounded-xl border border-[#1e3a5f] bg-[#0d1b2a]"
+            />
+          </a>
+          <p className="text-[10px] text-[#475569] mt-2">タップで原寸表示</p>
         </div>
       )}
     </div>

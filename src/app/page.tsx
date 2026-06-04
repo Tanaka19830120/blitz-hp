@@ -119,11 +119,6 @@ export default async function HomePage() {
                 </span>
               </h1>
 
-              {/* Accent line */}
-              <div className="flex items-center gap-4 mb-6">
-                <div className="h-px flex-1 max-w-[80px]" style={{ background: 'linear-gradient(90deg, #2563eb, transparent)' }} />
-                <span className="text-[#64748b] text-xs tracking-[0.3em] uppercase font-semibold">Est. 2019</span>
-              </div>
 
               <div className="flex flex-wrap gap-4 mt-6">
                 <Link href="/schedule" className="btn-primary text-base px-6 py-3">
