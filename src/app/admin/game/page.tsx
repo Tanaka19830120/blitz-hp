@@ -239,9 +239,11 @@ export default async function AdminGamePage({
   const lineupPlayerIds = dataPlayerIds.size > 0
     ? dataPlayerIds
     : new Set(lineup.map(l => l.userId))
-  const lineupPlayers   = allPlayers.filter(p => lineupPlayerIds.has(p.id))
-  const otherPlayers    = allPlayers.filter(p => !lineupPlayerIds.has(p.id))
-  const sortedPlayers   = [...lineupPlayers, ...otherPlayers]
+  const lineupPlayers   = allPlayers.filter(p => lineupPlayerIds.has(p.id) && !p.isGuest)
+  const otherPlayers    = allPlayers.filter(p => !lineupPlayerIds.has(p.id) && !p.isGuest)
+  const guestPlayers    = allPlayers.filter(p => p.isGuest)
+  // 助っ人は選択肢の末尾に回す（通常メンバーを優先表示）
+  const sortedPlayers   = [...lineupPlayers, ...otherPlayers, ...guestPlayers]
 
   // lineupForBook を打順→{userId,position,position2} マップに変換（マージ用）
   const lineupByOrder = new Map(

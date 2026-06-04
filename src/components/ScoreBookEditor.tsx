@@ -1342,48 +1342,48 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
               {/* 投球数 */}
               <label className="flex items-center gap-1 text-[#64748b]">
                 投球数
-                <input type="number" value={p.pitches ?? 0} min={0}
-                  onChange={e => setPitcherField(pIdx, 'pitches', parseInt(e.target.value) || 0)}
+                <input type="text" inputMode="numeric" value={p.pitches ?? 0}
+                  onChange={e => setPitcherField(pIdx, 'pitches', parseInt(e.target.value.replace(/\D/g, '')) || 0)}
                   className="w-12 text-center py-0.5 text-xs" />
               </label>
 
               {/* 失点 */}
               <label className="flex items-center gap-1 text-[#64748b]">
                 失点
-                <input type="number" value={p.runs} min={0}
-                  onChange={e => setPitcherField(pIdx, 'runs', parseInt(e.target.value) || 0)}
+                <input type="text" inputMode="numeric" value={p.runs}
+                  onChange={e => setPitcherField(pIdx, 'runs', parseInt(e.target.value.replace(/\D/g, '')) || 0)}
                   className="w-10 text-center py-0.5 text-xs" />
               </label>
 
               {/* 自責点 */}
               <label className="flex items-center gap-1 text-[#64748b]">
                 自責
-                <input type="number" value={p.earnedRuns ?? p.runs} min={0}
-                  onChange={e => setPitcherField(pIdx, 'earnedRuns', parseInt(e.target.value) || 0)}
+                <input type="text" inputMode="numeric" value={p.earnedRuns ?? p.runs}
+                  onChange={e => setPitcherField(pIdx, 'earnedRuns', parseInt(e.target.value.replace(/\D/g, '')) || 0)}
                   className="w-10 text-center py-0.5 text-xs" />
               </label>
 
               {/* 被安打 */}
               <label className="flex items-center gap-1 text-[#64748b]">
                 被安打
-                <input type="number" value={p.hitsAllowed ?? 0} min={0}
-                  onChange={e => setPitcherField(pIdx, 'hitsAllowed', parseInt(e.target.value) || 0)}
+                <input type="text" inputMode="numeric" value={p.hitsAllowed ?? 0}
+                  onChange={e => setPitcherField(pIdx, 'hitsAllowed', parseInt(e.target.value.replace(/\D/g, '')) || 0)}
                   className="w-10 text-center py-0.5 text-xs" />
               </label>
 
               {/* 与四球 */}
               <label className="flex items-center gap-1 text-[#64748b]">
                 四球
-                <input type="number" value={p.walks ?? 0} min={0}
-                  onChange={e => setPitcherField(pIdx, 'walks', parseInt(e.target.value) || 0)}
+                <input type="text" inputMode="numeric" value={p.walks ?? 0}
+                  onChange={e => setPitcherField(pIdx, 'walks', parseInt(e.target.value.replace(/\D/g, '')) || 0)}
                   className="w-10 text-center py-0.5 text-xs" />
               </label>
 
               {/* 奪三振 */}
               <label className="flex items-center gap-1 text-[#64748b]">
                 三振
-                <input type="number" value={p.strikeouts ?? 0} min={0}
-                  onChange={e => setPitcherField(pIdx, 'strikeouts', parseInt(e.target.value) || 0)}
+                <input type="text" inputMode="numeric" value={p.strikeouts ?? 0}
+                  onChange={e => setPitcherField(pIdx, 'strikeouts', parseInt(e.target.value.replace(/\D/g, '')) || 0)}
                   className="w-10 text-center py-0.5 text-xs" />
               </label>
 

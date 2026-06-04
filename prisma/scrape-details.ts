@@ -285,28 +285,62 @@ async function main() {
     return nameToUserId[name.trim()]
   }
 
-  // 未一致の選手は助っ人(isGuest)として作成・再利用
-  const guestCache = new Map<string, string>()  // normName → userId
+  // 未一致の選手を作成・再利用。
+  // 判定基準: 当時の背番号があれば「元メンバー(脱退者)」= isGuest:false、
+  //           背番号が無ければ「助っ人」= isGuest:true。
+  const playerCache = new Map<string, string>()  // normName → userId
   const createdGuests = new Set<string>()
-  async function getOrCreateGuestId(name: string): Promise<string | undefined> {
+  const createdFormer = new Set<string>()
+  async function getOrCreatePlayerId(name: string, jersey: string): Promise<string | undefined> {
     const key = normName(name)
     if (!key) return undefined
-    if (guestCache.has(key)) return guestCache.get(key)
-    let g = await prisma.user.findFirst({ where: { name: name.trim(), isGuest: true } })
-    if (!g) {
-      g = await prisma.user.create({
+    const hasNumber = /^\d+$/.test(jersey.trim())     // "0" も有効、"-"/空 は無し
+    const num = hasNumber ? parseInt(jersey.trim(), 10) : null
+    const shouldBeGuest = !hasNumber
+
+    const cached = playerCache.get(key)
+    if (cached) {
+      // 既存(同一実行内)。番号付きで見つかったら助っ人→元メンバーへ昇格
+      if (!shouldBeGuest) {
+        await prisma.user.update({ where: { id: cached }, data: { isGuest: false, ...(num != null ? { number: num } : {}) } }).catch(() => {})
+      }
+      return cached
+    }
+
+    let u = await prisma.user.findFirst({ where: { name: name.trim() } })
+    if (u) {
+      // 既存ユーザー（助っ人として作成済み等）。番号付きなら元メンバーへ昇格
+      if (!shouldBeGuest && u.isGuest) {
+        await prisma.user.update({ where: { id: u.id }, data: { isGuest: false, ...(num != null ? { number: num } : {}) } }).catch(() => {})
+      }
+    } else {
+      u = await prisma.user.create({
         data: {
           name: name.trim(),
-          email: `guest_${key.replace(/[^a-z0-9]/g, '')}_${Date.now()}@guest`,
+          email: `imp_${key.replace(/[^a-z0-9]/g, '')}_${Date.now()}@guest`,
           password: 'x',
           role: 'PLAYER',
-          isGuest: true,
+          number: num,
+          isGuest: shouldBeGuest,
         },
       })
-      createdGuests.add(name.trim())
+      if (shouldBeGuest) createdGuests.add(name.trim())
+      else createdFormer.add(`${name.trim()}(#${num})`)
     }
-    guestCache.set(key, g.id)
-    return g.id
+    playerCache.set(key, u.id)
+    return u.id
+  }
+
+  // 既存の助っ人ユーザーでも、当時背番号があれば元メンバーへ昇格させる
+  const guestIds = new Set(users.filter(u => u.isGuest).map(u => u.id))
+  const promotedFormer = new Set<string>()
+  async function promoteIfNumbered(userId: string, jersey: string, name: string) {
+    if (!guestIds.has(userId)) return
+    if (!/^\d+$/.test(jersey.trim())) return
+    const num = parseInt(jersey.trim(), 10)
+    await prisma.user.update({ where: { id: userId }, data: { isGuest: false, number: num } }).catch(() => {})
+    guestIds.delete(userId)
+    promotedFormer.add(`${name.trim()}(#${num})`)
   }
 
   // 日付+対戦相手 → Game マップ
@@ -400,11 +434,12 @@ async function main() {
       for (const stat of batting) {
         let userId = resolveUserId(stat.name, stat.number)
         if (!userId) {
-          // 未一致 → 助っ人として登録（名前があるもののみ）
-          userId = await getOrCreateGuestId(stat.name)
+          // 未一致 → 当時背番号があれば元メンバー、無ければ助っ人として登録
+          userId = await getOrCreatePlayerId(stat.name, stat.number)
           if (!userId) continue
-          if (stat.name) unmatchedBatters.push(`"${stat.name}"(${stat.number})→助っ人`)
+          if (stat.name) unmatchedBatters.push(`"${stat.name}"(${stat.number})`)
         }
+        await promoteIfNumbered(userId, stat.number, stat.name)
 
         try {
           await prisma.gameStat.upsert({
@@ -465,10 +500,11 @@ async function main() {
       for (const p of pitching) {
         let userId = resolveUserId(p.name, p.number)
         if (!userId) {
-          userId = await getOrCreateGuestId(p.name)
+          userId = await getOrCreatePlayerId(p.name, p.number)
           if (!userId) continue
-          if (p.name) unmatchedPitchers.push(`"${p.name}"(${p.number})→助っ人`)
+          if (p.name) unmatchedPitchers.push(`"${p.name}"(${p.number})`)
         }
+        await promoteIfNumbered(userId, p.number, p.name)
 
         try {
           await prisma.pitchingStat.upsert({
@@ -518,8 +554,16 @@ async function main() {
 
   console.log(`\n=== 完了 ===`)
   console.log(`成功: ${success}, スキップ: ${skipped}, 失敗: ${failed}`)
+  if (createdFormer.size > 0) {
+    console.log(`\n=== 元メンバー(背番号あり/脱退者) として新規登録 (${createdFormer.size}名) ===`)
+    console.log([...createdFormer].join(', '))
+  }
+  if (promotedFormer.size > 0) {
+    console.log(`\n=== 助っ人→元メンバーへ昇格 (背番号あり) (${promotedFormer.size}名) ===`)
+    console.log([...promotedFormer].join(', '))
+  }
   if (createdGuests.size > 0) {
-    console.log(`\n=== 新規作成した助っ人 (${createdGuests.size}名) ===`)
+    console.log(`\n=== 助っ人(背番号なし) として登録 (${createdGuests.size}名) ===`)
     console.log([...createdGuests].join(', '))
     console.log('※ この中に実際はメンバー（別表記）がいれば MEMBER_ALIASES に追加して再実行してください')
   }
