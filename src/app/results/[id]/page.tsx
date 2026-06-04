@@ -47,11 +47,11 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
       game: {
         include: {
           stats: {
-            include: { user: { select: { name: true, number: true } } },
+            include: { user: { select: { name: true, number: true, isGuest: true } } },
             orderBy: [{ battingOrder: 'asc' }, { plateAppearances: 'desc' }],
           },
           pitchingStats: {
-            include: { user: { select: { name: true, number: true } } },
+            include: { user: { select: { name: true, number: true, isGuest: true } } },
             orderBy: { id: 'asc' },
           },
         },
@@ -382,12 +382,19 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
                   <tr key={s.id} className={`border-b border-[#0f2035]/60 ${i % 2 === 0 ? '' : 'bg-[#0a1628]/20'}`}>
                     <td className="py-2 pr-1 text-center text-[#64748b] text-xs">{s.battingOrder ?? '–'}</td>
                     <td className="py-2 px-2">
-                      <Link href={`/members/${s.userId}`} className="flex items-center gap-1.5 hover:opacity-80 transition-opacity">
-                        {s.user.number != null && (
-                          <span className="text-xs text-[#475569]">#{s.user.number}</span>
-                        )}
-                        <span className="font-medium text-[#60a5fa] hover:underline text-sm">{s.user.name}</span>
-                      </Link>
+                      {s.user.isGuest ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-medium text-[#e2e8f0] text-sm">{s.user.name}</span>
+                          <span className="text-[10px] text-[#a78bfa] border border-[#a78bfa]/40 rounded px-1">助っ人</span>
+                        </div>
+                      ) : (
+                        <Link href={`/members/${s.userId}`} className="flex items-center gap-1.5 hover:opacity-80 transition-opacity">
+                          {s.user.number != null && (
+                            <span className="text-xs text-[#475569]">#{s.user.number}</span>
+                          )}
+                          <span className="font-medium text-[#60a5fa] hover:underline text-sm">{s.user.name}</span>
+                        </Link>
+                      )}
                     </td>
                     <td className="py-2 px-2 text-center text-[#94a3b8]">{s.atBats}</td>
                     <td className="py-2 px-2 text-center font-bold text-[#e2e8f0]">{s.hits}</td>
@@ -436,12 +443,19 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
               {game.pitchingStats.map((p, i) => (
                 <tr key={p.id} className={`border-b border-[#0f2035]/60 hover:bg-[#1e3a5f]/10 ${i % 2 === 0 ? '' : 'bg-[#0a1628]/20'}`}>
                   <td className="py-2 px-2">
-                    <Link href={`/members/${p.userId}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-                      {p.user.number != null && (
-                        <span className="text-xs text-[#475569] w-6 text-right">{p.user.number}</span>
-                      )}
-                      <span className="font-medium text-[#60a5fa] hover:underline">{p.user.name}</span>
-                    </Link>
+                    {p.user.isGuest ? (
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-[#e2e8f0]">{p.user.name}</span>
+                        <span className="text-[10px] text-[#a78bfa] border border-[#a78bfa]/40 rounded px-1">助っ人</span>
+                      </div>
+                    ) : (
+                      <Link href={`/members/${p.userId}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+                        {p.user.number != null && (
+                          <span className="text-xs text-[#475569] w-6 text-right">{p.user.number}</span>
+                        )}
+                        <span className="font-medium text-[#60a5fa] hover:underline">{p.user.name}</span>
+                      </Link>
+                    )}
                   </td>
                   <td className="py-2 px-2 text-center">
                     {p.decision ? (

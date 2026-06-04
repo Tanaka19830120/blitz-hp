@@ -31,6 +31,9 @@ async function main() {
   // v2: Add photoUrl to User
   await safeAddColumn('User', 'photoUrl', 'TEXT')
 
+  // v9: Add isGuest to User (助っ人)
+  await safeAddColumn('User', 'isGuest', 'BOOLEAN NOT NULL DEFAULT 0')
+
   // v3: Add EVENT to GameType (no-op for SQLite, already TEXT)
   // GameType is stored as TEXT in SQLite, no migration needed
 

@@ -41,6 +41,7 @@ model User {
   number    Int?
   position  String?
   photoUrl  String?
+  isGuest   Boolean  @default(false)   // 助っ人（メンバー一覧・個人成績ランキングから除外）
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

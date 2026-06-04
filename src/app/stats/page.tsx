@@ -57,6 +57,7 @@ async function getPitchingStats(year?: number): Promise<PitcherStats[]> {
   }
 
   const players = await prisma.user.findMany({
+    where: { isGuest: false },
     include: {
       pitchingStats: {
         include: {

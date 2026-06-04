@@ -35,6 +35,7 @@ export async function getBattingStats(year?: number): Promise<PlayerStats[]> {
   const dateFilter = yearFilter(year)
 
   const players = await prisma.user.findMany({
+    where: { isGuest: false },
     include: {
       gameStats: {
         include: { game: { include: { schedule: { select: { date: true } } } } },
