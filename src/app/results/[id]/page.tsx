@@ -24,6 +24,7 @@ function avgStr(h: number, ab: number) {
 
 // 打撃成績テーブルの合計列定義
 const STAT_COLS: { key: keyof BatterStats; label: string; always?: boolean }[] = [
+  { key: 'pa',       label: '打席', always: true },
   { key: 'ab',       label: '打数', always: true },
   { key: 'h',        label: '安打', always: true },
   // 打率は別途算出
@@ -366,6 +367,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
                 <tr className="text-xs text-[#64748b] border-b border-[#1e3a5f]">
                   <th className="py-2 pr-1 text-center w-6">#</th>
                   <th className="py-2 px-2 text-left">選手</th>
+                  <th className="py-2 px-2 text-center w-10">打席</th>
                   <th className="py-2 px-2 text-center w-10">打数</th>
                   <th className="py-2 px-2 text-center w-10">安打</th>
                   <th className="py-2 px-2 text-center w-12">打率</th>
@@ -375,6 +377,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
                   <th className="py-2 px-2 text-center w-10 hidden sm:table-cell">2B</th>
                   <th className="py-2 px-2 text-center w-10 hidden sm:table-cell">3B</th>
                   <th className="py-2 px-2 text-center w-10 hidden sm:table-cell">四球</th>
+                  <th className="py-2 px-2 text-center w-10 hidden sm:table-cell">死球</th>
                 </tr>
               </thead>
               <tbody>
@@ -396,6 +399,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
                         </Link>
                       )}
                     </td>
+                    <td className="py-2 px-2 text-center text-[#94a3b8]">{s.plateAppearances || 0}</td>
                     <td className="py-2 px-2 text-center text-[#94a3b8]">{s.atBats}</td>
                     <td className="py-2 px-2 text-center font-bold text-[#e2e8f0]">{s.hits}</td>
                     <td className="py-2 px-2 text-center font-mono text-xs text-[#64748b]">{avgStr(s.hits, s.atBats)}</td>
@@ -405,6 +409,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
                     <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{s.doubles || 0}</td>
                     <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{s.triples || 0}</td>
                     <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{s.walks || 0}</td>
+                    <td className="py-2 px-2 text-center text-[#94a3b8] hidden sm:table-cell">{s.hitByPitch || 0}</td>
                   </tr>
                 ))}
               </tbody>
