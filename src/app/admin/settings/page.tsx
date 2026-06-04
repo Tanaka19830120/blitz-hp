@@ -27,6 +27,17 @@ async function updateSettings(formData: FormData) {
   revalidatePath('/admin/settings')
 }
 
+async function updateContactRecipients(formData: FormData) {
+  'use server'
+  const value = String(formData.get('contactRecipients') || '').trim()
+  await prisma.setting.upsert({
+    where: { key: 'contactRecipients' },
+    create: { key: 'contactRecipients', value },
+    update: { value },
+  })
+  revalidatePath('/admin/settings')
+}
+
 export default async function AdminSettingsPage({
   searchParams,
 }: {
@@ -34,6 +45,8 @@ export default async function AdminSettingsPage({
 }) {
   const sp = await searchParams
   const savedValue = await getSetting('qualPaPerGame', '2.0')
+  const contactRecipients = await getSetting('contactRecipients', '')
+  const mailReady = !!(process.env.SMTP_USER && process.env.SMTP_PASS)
   // If a preset link was clicked, pre-fill with that value (but don't save yet)
   const displayValue = sp.preset ?? savedValue
 
@@ -103,7 +116,7 @@ export default async function AdminSettingsPage({
       </div>
 
       {/* 説明 */}
-      <div className="glass-card rounded-xl p-4 text-xs text-[#64748b] space-y-1">
+      <div className="glass-card rounded-xl p-4 text-xs text-[#64748b] space-y-1 mb-8">
         <div className="flex justify-between">
           <span>現在の保存値</span>
           <span className="text-[#60a5fa] font-bold">{savedValue} PA/試合</span>
@@ -112,6 +125,34 @@ export default async function AdminSettingsPage({
           <span>例）試合数 20試合 × {savedValue} =</span>
           <span className="text-[#94a3b8] font-bold">{Math.floor(20 * parseFloat(savedValue))} 打席以上で規定到達</span>
         </div>
+      </div>
+
+      {/* 問い合わせ配信先 */}
+      <div className="glass-card rounded-2xl p-6">
+        <h2 className="text-sm font-bold text-[#60a5fa] mb-1">問い合わせの配信先メール</h2>
+        <p className="text-xs text-[#64748b] mb-3 leading-relaxed">
+          お問い合わせフォームの内容を送るメールアドレス。<br />
+          <span className="text-[#94a3b8]">複数指定する場合は改行またはカンマ区切り</span>で入力してください。
+        </p>
+        <div className={`text-xs mb-4 px-3 py-2 rounded-lg border ${
+          mailReady
+            ? 'border-[#22c55e]/40 text-[#22c55e] bg-[#22c55e]/5'
+            : 'border-[#fbbf24]/40 text-[#fbbf24] bg-[#fbbf24]/5'
+        }`}>
+          {mailReady
+            ? '✅ メール送信は有効です（SMTP 設定済み）'
+            : '⚠ メール送信は未設定です（環境変数 SMTP_USER / SMTP_PASS が必要）。設定されるまでは問い合わせを LINE グループに通知します。'}
+        </div>
+        <form action={updateContactRecipients}>
+          <textarea
+            name="contactRecipients"
+            rows={4}
+            defaultValue={contactRecipients}
+            placeholder={"example1@gmail.com\nexample2@gmail.com"}
+            className="w-full resize-y mb-3"
+          />
+          <SaveFormButton label="配信先を保存" />
+        </form>
       </div>
     </div>
   )

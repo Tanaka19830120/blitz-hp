@@ -119,3 +119,18 @@ export async function getProfileSetting(key: string): Promise<string> {
     return fallback
   }
 }
+
+// ── 問い合わせ配信先メール ──
+/** 問い合わせ通知先メールアドレス一覧を取得（改行/カンマ区切り設定をパース） */
+export async function getContactRecipients(): Promise<string[]> {
+  try {
+    const s = await prisma.setting.findUnique({ where: { key: 'contactRecipients' } })
+    if (!s?.value) return []
+    return s.value
+      .split(/[\n,]/)
+      .map(x => x.trim())
+      .filter(x => x.length > 0)
+  } catch {
+    return []
+  }
+}

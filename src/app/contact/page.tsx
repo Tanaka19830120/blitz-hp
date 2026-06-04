@@ -4,12 +4,36 @@ import { useState } from 'react'
 
 export default function ContactPage() {
   const [sent, setSent] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    // In a real app, this would POST to an API route
-    // For now we just show a success message
-    setSent(true)
+    setError(null)
+    const form = e.currentTarget
+    const data = {
+      name:    (form.elements.namedItem('name') as HTMLInputElement)?.value ?? '',
+      email:   (form.elements.namedItem('email') as HTMLInputElement)?.value ?? '',
+      type:    (form.elements.namedItem('type') as HTMLSelectElement)?.value ?? 'other',
+      message: (form.elements.namedItem('message') as HTMLTextAreaElement)?.value ?? '',
+    }
+    setSending(true)
+    try {
+      const res = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j.error || '送信に失敗しました')
+      }
+      setSent(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '送信に失敗しました')
+    } finally {
+      setSending(false)
+    }
   }
 
   return (
@@ -36,15 +60,15 @@ export default function ContactPage() {
           <form onSubmit={handleSubmit} className="grid gap-5">
             <div>
               <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">お名前 *</label>
-              <input type="text" required placeholder="山田 太郎" className="w-full" />
+              <input name="name" type="text" required placeholder="山田 太郎" className="w-full" />
             </div>
             <div>
               <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">メールアドレス *</label>
-              <input type="email" required placeholder="yamada@example.com" className="w-full" />
+              <input name="email" type="email" required placeholder="yamada@example.com" className="w-full" />
             </div>
             <div>
               <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">お問い合わせ種別</label>
-              <select className="w-full">
+              <select name="type" className="w-full">
                 <option value="trial">体験参加について</option>
                 <option value="join">入団希望</option>
                 <option value="practice">練習試合の申し込み</option>
@@ -54,15 +78,17 @@ export default function ContactPage() {
             <div>
               <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">お問い合わせ内容 *</label>
               <textarea
+                name="message"
                 required
                 rows={5}
                 placeholder="お気軽にご記入ください"
                 className="w-full bg-[#0d1b2a] border border-[#1e3a5f] rounded-lg px-4 py-3 text-[#e2e8f0] placeholder:text-[#334155] focus:outline-none focus:border-[#2563eb] resize-none"
               />
             </div>
+            {error && <p className="text-sm text-[#ef4444]">⚠ {error}</p>}
             <div>
-              <button type="submit" className="btn-primary w-full py-3 text-base">
-                送信する
+              <button type="submit" disabled={sending} className="btn-primary w-full py-3 text-base disabled:opacity-60">
+                {sending ? '送信中…' : '送信する'}
               </button>
             </div>
           </form>
