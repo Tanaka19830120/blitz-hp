@@ -199,7 +199,7 @@ export default async function AdminPage() {
               <div className="text-xs text-[#64748b]">チーム紹介ページの編集</div>
             </div>
           </Link>
-          <Link href="/admin/settings#contact" className="glass-card rounded-xl p-5 hover:border-[#2563eb]/40 transition-all flex items-center gap-4">
+          <Link href="/admin/contact" className="glass-card rounded-xl p-5 hover:border-[#2563eb]/40 transition-all flex items-center gap-4">
             <div className="w-10 h-10 rounded-lg bg-[#1d4ed8]/20 flex items-center justify-center text-[#60a5fa] text-xl">✉️</div>
             <div>
               <div className="font-semibold text-[#e2e8f0]">問い合わせ配信先</div>

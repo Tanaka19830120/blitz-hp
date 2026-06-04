@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getContactRecipients } from '@/lib/settings'
 import { isMailConfigured, sendMail } from '@/lib/mail'
-import { sendToLineGroup } from '@/lib/line'
 
 const TYPE_LABELS: Record<string, string> = {
   trial: '体験参加について',
@@ -41,32 +40,25 @@ export async function POST(req: Request) {
     `※ 返信はこのメールの「返信」で送信者(${email})宛に届きます。`,
   ].join('\n')
 
-  let delivered = false
-  const errors: string[] = []
-
-  // 1) メール送信（SMTP 設定済み & 宛先あり）
-  if (recipients.length > 0 && isMailConfigured()) {
-    try {
-      await sendMail({ to: recipients, subject, text, replyTo: email })
-      delivered = true
-    } catch (e) {
-      errors.push(`mail: ${e instanceof Error ? e.message : String(e)}`)
-    }
-  }
-
-  // 2) フォールバック: LINE グループへ通知（問い合わせを取りこぼさない）
-  try {
-    await sendToLineGroup(
-      `📨【BLITZ お問い合わせ】\n種別: ${type}\nお名前: ${name}\nメール: ${email}\n----\n${message}`
-    )
-    delivered = true
-  } catch (e) {
-    errors.push(`line: ${e instanceof Error ? e.message : String(e)}`)
-  }
-
-  if (!delivered) {
+  // メール送信のみ（LINE 全体配信は廃止）
+  if (recipients.length === 0) {
     return NextResponse.json(
-      { error: '送信先が未設定のため通知できませんでした。管理者にご連絡ください。', details: errors.join('; ') },
+      { error: '配信先メールが未設定のため送信できませんでした。管理者にご連絡ください。' },
+      { status: 503 }
+    )
+  }
+  if (!isMailConfigured()) {
+    return NextResponse.json(
+      { error: 'メール送信が未設定のため送信できませんでした。管理者にご連絡ください。' },
+      { status: 503 }
+    )
+  }
+
+  try {
+    await sendMail({ to: recipients, subject, text, replyTo: email })
+  } catch (e) {
+    return NextResponse.json(
+      { error: '送信に失敗しました。時間をおいて再度お試しください。', details: e instanceof Error ? e.message : String(e) },
       { status: 500 }
     )
   }
