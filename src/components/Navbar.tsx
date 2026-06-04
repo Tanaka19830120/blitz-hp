@@ -63,7 +63,9 @@ export function Navbar() {
         <div className="hidden md:flex items-center gap-3">
           {session ? (
             <div className="flex items-center gap-3">
-              <span className="text-sm text-[#94a3b8]">{session.user?.name}</span>
+              <Link href="/account" className="text-sm text-[#94a3b8] hover:text-[#e2e8f0] transition-colors">
+                {session.user?.name}
+              </Link>
               <button
                 onClick={() => signOut()}
                 className="text-sm text-[#64748b] hover:text-[#e2e8f0] transition-colors"
@@ -116,7 +118,7 @@ export function Navbar() {
           <div className="pt-2 border-t border-[#1e3a5f]">
             {session ? (
               <div className="flex items-center justify-between">
-                <span className="text-sm text-[#94a3b8]">{session.user?.name}</span>
+                <Link href="/account" onClick={() => setMenuOpen(false)} className="text-sm text-[#94a3b8]">{session.user?.name}（アカウント）</Link>
                 <button onClick={() => signOut()} className="text-sm text-[#64748b]">ログアウト</button>
               </div>
             ) : (
