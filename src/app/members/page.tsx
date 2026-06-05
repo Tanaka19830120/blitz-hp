@@ -6,7 +6,8 @@ export const dynamic = 'force-dynamic'
 
 export default async function MembersPage() {
   const members = await prisma.user.findMany({
-    where: { isGuest: false },
+    // 現メンバーのみ（正式ログインアカウント=メールが @b）。元メンバー(@guest)・助っ人は除外
+    where: { isGuest: false, email: { endsWith: '@b' } },
     orderBy: [{ number: 'asc' }, { name: 'asc' }],
     select: {
       id: true,
