@@ -134,7 +134,7 @@ function parseTitleInfo(html: string): { date: string; opponent: string } | null
  *  - 優先: myteam クラスで BLITZ 行を特定（teams.one の信頼できる識別子）
  *  - フォールバック: チーム名テキストで判定
  */
-function parseInningScores(html: string, expectedBlitz?: number | null): { blitz: (number|null)[]; opponent: (number|null)[] } | null {
+function parseInningScores(html: string, expectedBlitz?: number | null): { blitz: (number|null)[]; opponent: (number|null)[]; blitzFirst: boolean } | null {
   const root = parseHTML(html)
   const tables = root.querySelectorAll('table')
   const table = tables[0]
@@ -154,31 +154,34 @@ function parseInningScores(html: string, expectedBlitz?: number | null): { blitz
   }
   const sum = (arr: (number|null)[]) => arr.reduce((s: number, n) => s + (n ?? 0), 0)
 
-  const a = parseScores(dataRows[0])
-  const b = parseScores(dataRows[1])
+  const a = parseScores(dataRows[0])  // teams.one 上段 = 先攻
+  const b = parseScores(dataRows[1])  // 下段 = 後攻
+  // blitzFirst: BLITZ が上段(先攻)なら true
+  const asFirst  = { blitz: a, opponent: b, blitzFirst: true }
+  const asSecond = { blitz: b, opponent: a, blitzFirst: false }
 
-  // ① 得点(BLITZ合計)と一致する行を BLITZ とする（最も確実。先攻後攻の取り違え防止）
+  // ① 得点(BLITZ合計)と一致する行を BLITZ とする（最も確実）
   if (expectedBlitz != null) {
     const sa = sum(a), sb = sum(b)
-    if (sa === expectedBlitz && sb !== expectedBlitz) return { blitz: a, opponent: b }
-    if (sb === expectedBlitz && sa !== expectedBlitz) return { blitz: b, opponent: a }
+    if (sa === expectedBlitz && sb !== expectedBlitz) return asFirst
+    if (sb === expectedBlitz && sa !== expectedBlitz) return asSecond
   }
 
   // ② myteam クラスで BLITZ を特定
   const idxBlitzClass = dataRows.findIndex(r =>
     r.classNames?.includes('myteam') || r.getAttribute('class')?.includes('myteam')
   )
-  if (idxBlitzClass === 0) return { blitz: a, opponent: b }
-  if (idxBlitzClass === 1) return { blitz: b, opponent: a }
+  if (idxBlitzClass === 0) return asFirst
+  if (idxBlitzClass === 1) return asSecond
 
   // ③ チーム名テキストで判定
   const name0 = dataRows[0].querySelectorAll('td')[0]?.text.trim() ?? ''
   const name1 = dataRows[1].querySelectorAll('td')[0]?.text.trim() ?? ''
-  if (name0.toUpperCase().includes('BLITZ')) return { blitz: a, opponent: b }
-  if (name1.toUpperCase().includes('BLITZ')) return { blitz: b, opponent: a }
+  if (name0.toUpperCase().includes('BLITZ')) return asFirst
+  if (name1.toUpperCase().includes('BLITZ')) return asSecond
 
   // ④ 判定不能: 先攻=相手、後攻=BLITZ と仮定
-  return { blitz: b, opponent: a }
+  return asSecond
 }
 
 /** イニング表の2行の「合計(R)」を取得（ダブルヘッダー判別用、BLITZ未確定でOK） */

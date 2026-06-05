@@ -72,7 +72,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
   }
 
   // イニングスコアをパース（専用カラム優先 → 無ければスコアブックJSONから復元）
-  let inningScores: { blitz: (number | null)[]; opponent: (number | null)[] } | null = null
+  let inningScores: { blitz: (number | null)[]; opponent: (number | null)[]; blitzFirst?: boolean } | null = null
   if (game.inningScores) {
     try { inningScores = JSON.parse(game.inningScores) } catch { /* ignore */ }
   }
@@ -217,37 +217,48 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
           <h2 className="text-sm font-bold text-[#94a3b8] uppercase tracking-wider mb-3">
             イニング
           </h2>
-          <table className="w-full text-sm text-center border-collapse min-w-[480px]">
-            <thead>
-              <tr className="text-[#64748b] text-xs">
-                <th className="text-left py-2 pr-4 font-medium w-24">チーム</th>
-                {inningScores.blitz.map((_, i) => (
-                  <th key={i} className="w-9 py-2">{i + 1}</th>
-                ))}
-                <th className="w-12 py-2 text-[#94a3b8] font-bold">計</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-t border-[#1e3a5f]/50">
-                <td className="text-left py-2 pr-4 font-bold text-[#60a5fa]">BLITZ</td>
-                {inningScores.blitz.map((v, i) => (
-                  <td key={i} className={`py-2 font-mono ${v !== null && v > 0 ? 'text-[#e2e8f0] font-bold' : 'text-[#475569]'}`}>
-                    {v === null ? '–' : v}
-                  </td>
-                ))}
-                <td className="py-2 font-black text-lg text-[#e2e8f0]">{game.ourScore}</td>
-              </tr>
-              <tr className="border-t border-[#1e3a5f]/50">
-                <td className="text-left py-2 pr-4 font-medium text-[#94a3b8]">{schedule.opponent}</td>
-                {inningScores.opponent.map((v, i) => (
-                  <td key={i} className={`py-2 font-mono ${v !== null && v > 0 ? 'text-[#ef4444]' : 'text-[#475569]'}`}>
-                    {v === null ? '–' : v}
-                  </td>
-                ))}
-                <td className="py-2 font-black text-lg text-[#64748b]">{game.opponentScore}</td>
-              </tr>
-            </tbody>
-          </table>
+          {(() => {
+            const maxInn = Math.max(inningScores.blitz.length, inningScores.opponent.length)
+            const blitzRow = {
+              label: 'BLITZ', total: game.ourScore, arr: inningScores.blitz,
+              labelCls: 'text-[#60a5fa]', cellPos: 'text-[#e2e8f0] font-bold', totalCls: 'text-[#e2e8f0]',
+            }
+            const oppRow = {
+              label: schedule.opponent, total: game.opponentScore, arr: inningScores.opponent,
+              labelCls: 'text-[#94a3b8]', cellPos: 'text-[#ef4444]', totalCls: 'text-[#64748b]',
+            }
+            // 先攻を上に表示（blitzFirst が false の試合は相手が先攻）
+            const rows = inningScores.blitzFirst === false ? [oppRow, blitzRow] : [blitzRow, oppRow]
+            return (
+              <table className="w-full text-sm text-center border-collapse min-w-[480px]">
+                <thead>
+                  <tr className="text-[#64748b] text-xs">
+                    <th className="text-left py-2 pr-4 font-medium w-24">チーム</th>
+                    {Array.from({ length: maxInn }, (_, i) => (
+                      <th key={i} className="w-9 py-2">{i + 1}</th>
+                    ))}
+                    <th className="w-12 py-2 text-[#94a3b8] font-bold">計</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr key={row.label} className="border-t border-[#1e3a5f]/50">
+                      <td className={`text-left py-2 pr-4 font-bold ${row.labelCls}`}>{row.label}</td>
+                      {Array.from({ length: maxInn }, (_, i) => {
+                        const v = row.arr[i] ?? null
+                        return (
+                          <td key={i} className={`py-2 font-mono ${v !== null && v > 0 ? row.cellPos : 'text-[#475569]'}`}>
+                            {v === null ? '–' : v}
+                          </td>
+                        )
+                      })}
+                      <td className={`py-2 font-black text-lg ${row.totalCls}`}>{row.total}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          })()}
         </div>
       )}
 
