@@ -127,6 +127,9 @@ export default async function HomePage() {
                 <Link href="/results" className="btn-gold text-base px-6 py-3">
                   ⚾ 試合結果
                 </Link>
+                <Link href="/profile" className="text-base px-6 py-3 rounded-xl border border-[#1e3a5f] text-[#94a3b8] hover:text-[#e2e8f0] hover:border-[#2563eb]/50 transition-all">
+                  🏟 チームプロフィール
+                </Link>
               </div>
             </div>
 

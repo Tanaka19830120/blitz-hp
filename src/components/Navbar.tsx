@@ -8,12 +8,12 @@ import { useState } from 'react'
 
 const navLinks = [
   { href: '/', label: 'ホーム' },
+  { href: '/profile', label: 'チームプロフィール' },
   { href: '/schedule', label: '日程・出欠' },
   { href: '/results', label: '試合結果' },
-  { href: '/stats', label: '成績' },
-  { href: '/album', label: '写真' },
+  { href: '/stats', label: '個人成績' },
   { href: '/members', label: 'メンバー' },
-  { href: '/profile', label: 'チームプロフィール' },
+  { href: '/album', label: '写真' },
   { href: '/help', label: '使い方' },
   { href: '/contact', label: 'お問い合わせ' },
 ]
