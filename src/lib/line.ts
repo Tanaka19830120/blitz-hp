@@ -182,10 +182,13 @@ export function buildReminder(schedules: {
   ].filter(Boolean).join('\n')
 }
 
-/** 出欠集計（単体 or 複数試合対応） */
+/** 出欠集計（単体 or 複数試合対応）
+ *  members を渡すと、回答していない現メンバーを「未回答」として全員表示する。
+ */
 export function buildAttendanceSummary(
   schedule: { date: Date; opponent: string } | { date: Date; opponent: string }[],
-  attendances: { status: string; user: { name: string } }[]
+  attendances: { status: string; userId: string; user: { name: string } }[],
+  members?: { id: string; name: string }[]
 ): string {
   // 複数試合の場合 opponent を結合
   const primary = Array.isArray(schedule) ? schedule[0] : schedule
@@ -195,7 +198,14 @@ export function buildAttendanceSummary(
   const attending = attendances.filter(a => a.status === 'ATTENDING').map(a => a.user.name)
   const absent    = attendances.filter(a => a.status === 'ABSENT').map(a => a.user.name)
   const maybe     = attendances.filter(a => a.status === 'MAYBE').map(a => a.user.name)
-  const pending   = attendances.filter(a => a.status === 'PENDING').map(a => a.user.name)
+
+  // 未回答 = 現メンバーのうち、参加/欠席/未定 を回答していない人（未登録も含む）
+  const respondedIds = new Set(
+    attendances.filter(a => ['ATTENDING', 'ABSENT', 'MAYBE'].includes(a.status)).map(a => a.userId)
+  )
+  const pending = (members ?? [])
+    .filter(m => !respondedIds.has(m.id))
+    .map(m => m.name)
 
   return [
     `📋【BLITZ】出欠状況`,

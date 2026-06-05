@@ -52,10 +52,19 @@ async function sendLineReminder(scheduleId: string): Promise<void> {
   revalidatePath('/admin')
 }
 
+// 現メンバー（未回答の算出用）
+async function getCurrentMembers() {
+  return prisma.user.findMany({
+    where: { isGuest: false, email: { endsWith: '@b' } },
+    select: { id: true, name: true },
+    orderBy: [{ number: 'asc' }, { name: 'asc' }],
+  })
+}
+
 // ── 出欠集計 プレビュー ──
 async function previewLineAttendance(scheduleId: string): Promise<string> {
   'use server'
-  const [group, senderFooter] = await Promise.all([getGroupSchedules(scheduleId), getSenderFooter()])
+  const [group, senderFooter, members] = await Promise.all([getGroupSchedules(scheduleId), getSenderFooter(), getCurrentMembers()])
   if (!group.length) return '（日程が見つかりません）'
   const primary = await prisma.schedule.findUnique({
     where: { id: group[0].id },
@@ -63,13 +72,13 @@ async function previewLineAttendance(scheduleId: string): Promise<string> {
   })
   if (!primary) return '（データなし）'
   const scheduleArg = group.length === 1 ? group[0] : group
-  return buildAttendanceSummary(scheduleArg, primary.attendances) + senderFooter
+  return buildAttendanceSummary(scheduleArg, primary.attendances, members) + senderFooter
 }
 
 // ── 出欠集計 送信 ──
 async function sendLineAttendance(scheduleId: string): Promise<void> {
   'use server'
-  const [group, senderFooter] = await Promise.all([getGroupSchedules(scheduleId), getSenderFooter()])
+  const [group, senderFooter, members] = await Promise.all([getGroupSchedules(scheduleId), getSenderFooter(), getCurrentMembers()])
   if (!group.length) return
   const primary = await prisma.schedule.findUnique({
     where:   { id: group[0].id },
@@ -77,7 +86,7 @@ async function sendLineAttendance(scheduleId: string): Promise<void> {
   })
   if (!primary) return
   const scheduleArg = group.length === 1 ? group[0] : group
-  const msg = buildAttendanceSummary(scheduleArg, primary.attendances) + senderFooter
+  const msg = buildAttendanceSummary(scheduleArg, primary.attendances, members) + senderFooter
   await sendToLineGroup(msg)
   revalidatePath('/admin')
 }
