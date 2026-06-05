@@ -77,7 +77,7 @@ export default async function SchedulePage() {
   const session = await auth()
   const now = new Date()
 
-  const [rawSchedules, gameTypeLabels] = await Promise.all([
+  const [rawSchedules, gameTypeLabels, members] = await Promise.all([
     prisma.schedule.findMany({
       where:   { date: { gte: new Date(now.getFullYear(), now.getMonth(), 1) } },
       orderBy: { date: 'asc' },
@@ -89,6 +89,12 @@ export default async function SchedulePage() {
       take: 40,
     }),
     getGameTypeLabels(),
+    // 現メンバー（未回答の算出用）
+    prisma.user.findMany({
+      where: { isGuest: false, email: { endsWith: '@b' } },
+      select: { id: true, name: true },
+      orderBy: [{ number: 'asc' }, { name: 'asc' }],
+    }),
   ])
 
   const schedules = rawSchedules as ScheduleRow[]
@@ -118,6 +124,13 @@ export default async function SchedulePage() {
             const attending = primary.attendances.filter(a => a.status === 'ATTENDING')
             const absent    = primary.attendances.filter(a => a.status === 'ABSENT')
             const maybe     = primary.attendances.filter(a => a.status === 'MAYBE')
+            // 未回答 = 現メンバーのうち、回答(参加/欠席/未定)していない人
+            const respondedIds = new Set(
+              primary.attendances
+                .filter(a => ['ATTENDING', 'ABSENT', 'MAYBE'].includes(a.status))
+                .map(a => a.userId)
+            )
+            const notResponded = members.filter(m => !respondedIds.has(m.id))
 
             const { label, cls } = statusLabel(myAttendance?.status ?? 'PENDING')
             const isPast = new Date(primary.date) < now
@@ -235,7 +248,7 @@ export default async function SchedulePage() {
                 </div>
 
                 {/* 出欠集計 */}
-                <div className="mt-4 pt-4 border-t border-[#1e3a5f]/30 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                <div className="mt-4 pt-4 border-t border-[#1e3a5f]/30 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
                   <div>
                     <span className="text-[#22c55e] font-bold">✓ 参加 {attending.length}名</span>
                     {attending.length > 0 && (
@@ -252,14 +265,22 @@ export default async function SchedulePage() {
                       </div>
                     )}
                   </div>
-                  {maybe.length > 0 && (
-                    <div>
-                      <span className="text-[#f59e0b] font-bold">? 未定 {maybe.length}名</span>
+                  <div>
+                    <span className="text-[#f59e0b] font-bold">? 未定 {maybe.length}名</span>
+                    {maybe.length > 0 && (
                       <div className="mt-1 text-[#64748b] leading-relaxed">
                         {maybe.map(a => a.user.name).join('・')}
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-[#e2e8f0] font-bold">▢ 未回答 {notResponded.length}名</span>
+                    {notResponded.length > 0 && (
+                      <div className="mt-1 text-[#e2e8f0] font-bold leading-relaxed">
+                        {notResponded.map(m => m.name).join('・')}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )

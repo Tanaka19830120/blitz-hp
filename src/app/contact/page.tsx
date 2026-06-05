@@ -43,31 +43,6 @@ export default function ContactPage() {
         <p className="text-[#64748b]">体験参加・入団希望など、お気軽にご連絡ください。</p>
       </div>
 
-      {/* LINE で問い合わせ（メイン導線） */}
-      <div className="glass-card rounded-2xl p-6 mb-6 text-center border border-[#06c755]/30">
-        <h2 className="text-lg font-bold text-[#e2e8f0] mb-2">💬 LINE で問い合わせ</h2>
-        <p className="text-sm text-[#94a3b8] mb-4">
-          BLITZ の LINE 公式アカウントを友だち追加して、トークでお気軽にメッセージください。<br className="hidden sm:block" />
-          そのまま担当者とやり取りできます（おすすめ）。
-        </p>
-        <a
-          href="https://line.me/R/ti/p/@650qnnkf"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-white text-base"
-          style={{ background: '#06c755' }}
-        >
-          ＋ LINE で友だち追加して問い合わせる
-        </a>
-        <p className="text-[10px] text-[#475569] mt-3">ID: @650qnnkf</p>
-      </div>
-
-      <div className="flex items-center gap-3 mb-6">
-        <div className="h-px flex-1 bg-[#1e3a5f]" />
-        <span className="text-xs text-[#475569]">または フォームで送信</span>
-        <div className="h-px flex-1 bg-[#1e3a5f]" />
-      </div>
-
       {sent ? (
         <div className="glass-card rounded-2xl p-10 text-center">
           <div className="text-4xl mb-4">✅</div>
