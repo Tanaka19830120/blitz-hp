@@ -29,6 +29,14 @@ async function createSchedule(_prev: CreateResult, formData: FormData): Promise<
   if (!location) return { ok: false, error: '場所を入力してください' }
   if (!opponent && type !== 'EVENT') return { ok: false, error: '対戦相手を選択してください' }
 
+  // 同一日に既存の日程があれば新規追加をブロック → 既存日程の「＋試合追加」へ誘導
+  const dayStart = new Date(`${date}T00:00:00`)
+  const dayEnd   = new Date(`${date}T23:59:59`)
+  const sameDay = await prisma.schedule.findFirst({ where: { date: { gte: dayStart, lte: dayEnd } } })
+  if (sameDay) {
+    return { ok: false, error: 'この日には既に日程があります。下の登録済み日程の「＋試合追加」から追加してください。' }
+  }
+
   await prisma.schedule.create({
     data: {
       date: dateTime,
