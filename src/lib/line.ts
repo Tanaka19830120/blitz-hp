@@ -350,7 +350,7 @@ export function buildLineupFromJson(
 
 /** 試合結果（オプションで打者・投手成績も含む） */
 export function buildGameResult(
-  schedule: { date: Date; opponent: string },
+  schedule: { id: string; date: Date; opponent: string },
   game: { ourScore: number; opponentScore: number; result: string; note?: string | null },
   extras?: {
     scorebook:   ScoreBookData
@@ -420,6 +420,10 @@ export function buildGameResult(
       }
     }
   }
+
+  lines.push(``)
+  lines.push(`📊 試合結果はこちら`)
+  lines.push(`https://blitz-hp.vercel.app/results/${schedule.id}`)
 
   return lines.filter(Boolean).join('\n')
 }
