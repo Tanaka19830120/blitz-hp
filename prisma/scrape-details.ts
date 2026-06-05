@@ -95,6 +95,17 @@ function toInt(s: string | undefined | null): number {
   return isNaN(n) ? 0 : n
 }
 
+/** 会場名の表記ゆれをマスタ表記に正規化 */
+const LOCATION_ALIASES: Record<string, string> = {
+  '別所北公園グラウンド': '別所北公園',
+  '別所北グラウンド': '別所北公園',
+  '姫路別所北グラウンド': '別所北公園',
+}
+function normalizeLocation(loc: string | null): string | null {
+  if (!loc) return loc
+  return LOCATION_ALIASES[loc.trim()] ?? loc
+}
+
 /** 名前を正規化（全角スペース・前後空白を除去、小文字化） */
 function normName(n: string): string {
   return n.trim().replace(/\s+/g, '').replace(/　/g, '').toLowerCase()
@@ -406,7 +417,8 @@ async function main() {
 
       // 会場
       const placeMatch = html.match(/<p class="place">\s*([\s\S]*?)\s*<\/p>/)
-      const place = placeMatch ? placeMatch[1].replace(/<[^>]+>/g, '').trim().replace(/\s+/g, ' ') : null
+      const placeRaw = placeMatch ? placeMatch[1].replace(/<[^>]+>/g, '').trim().replace(/\s+/g, ' ') : null
+      const place = normalizeLocation(placeRaw)
 
       // 打者・投手成績
       const batting  = parseBattingStats(html)
