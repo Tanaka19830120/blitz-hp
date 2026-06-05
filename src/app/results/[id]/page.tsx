@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { auth } from '@/auth'
 import { calcBatterStats, cellColor, codeToJa, type ScoreBookData, type BatterStats } from '@/lib/scorebook'
 
 function formatDate(date: Date) {
@@ -61,6 +62,9 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
   })
 
   if (!schedule || !schedule.game) notFound()
+
+  const session = await auth()
+  const isAdmin = (session?.user as { role?: string })?.role === 'ADMIN'
 
   const game = schedule.game
   const { label: typeLabel2, cls: typeCls } = typeLabel(schedule.type)
@@ -175,6 +179,14 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
           )}
           {schedule.location && (
             <span className="text-sm text-[#64748b]">📍 {schedule.location}</span>
+          )}
+          {isAdmin && (
+            <Link
+              href={`/admin/schedule?edit=${schedule.id}`}
+              className="text-xs px-2 py-0.5 rounded border border-[#a78bfa]/40 text-[#a78bfa] hover:bg-[#a78bfa]/10 transition-all"
+            >
+              📍 場所を編集
+            </Link>
           )}
         </div>
 
