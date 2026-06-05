@@ -209,6 +209,19 @@ export default async function HomePage() {
           </div>
         </section>
       )}
+
+      {/* お問い合わせ CTA */}
+      <section className="max-w-7xl mx-auto px-4 pb-20">
+        <div className="glass-card rounded-2xl p-8 text-center">
+          <h2 className="text-xl font-black text-[#e2e8f0] mb-2">⚾ 仲間募集中！</h2>
+          <p className="text-[#64748b] mb-6 text-sm">
+            体験参加・入団希望はお気軽にどうぞ。経験者・未経験者問わず歓迎します。
+          </p>
+          <Link href="/contact" className="btn-primary text-base px-8 py-3 inline-block">
+            ✉️ お問い合わせ
+          </Link>
+        </div>
+      </section>
     </div>
   )
 }
