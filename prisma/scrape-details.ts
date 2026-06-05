@@ -134,7 +134,7 @@ function parseTitleInfo(html: string): { date: string; opponent: string } | null
  *  - 優先: myteam クラスで BLITZ 行を特定（teams.one の信頼できる識別子）
  *  - フォールバック: チーム名テキストで判定
  */
-function parseInningScores(html: string): { blitz: (number|null)[]; opponent: (number|null)[] } | null {
+function parseInningScores(html: string, expectedBlitz?: number | null): { blitz: (number|null)[]; opponent: (number|null)[] } | null {
   const root = parseHTML(html)
   const tables = root.querySelectorAll('table')
   const table = tables[0]
@@ -152,29 +152,33 @@ function parseInningScores(html: string): { blitz: (number|null)[]; opponent: (n
       return (t === '-' || t === '' || t === 'x') ? null : toInt(t)
     })
   }
+  const sum = (arr: (number|null)[]) => arr.reduce((s, n) => s + (n ?? 0), 0)
 
-  // ① myteam クラスで BLITZ を特定（最も信頼性が高い）
-  const blitzRow = dataRows.find(r =>
-    r.classNames?.includes('myteam') || r.getAttribute('class')?.includes('myteam')
-  )
-  if (blitzRow) {
-    const opponentRow = dataRows.find(r => r !== blitzRow)
-    if (opponentRow) {
-      return { blitz: parseScores(blitzRow), opponent: parseScores(opponentRow) }
-    }
+  const a = parseScores(dataRows[0])
+  const b = parseScores(dataRows[1])
+
+  // ① 得点(BLITZ合計)と一致する行を BLITZ とする（最も確実。先攻後攻の取り違え防止）
+  if (expectedBlitz != null) {
+    const sa = sum(a), sb = sum(b)
+    if (sa === expectedBlitz && sb !== expectedBlitz) return { blitz: a, opponent: b }
+    if (sb === expectedBlitz && sa !== expectedBlitz) return { blitz: b, opponent: a }
   }
 
-  // ② フォールバック: チーム名テキストで判定
+  // ② myteam クラスで BLITZ を特定
+  const idxBlitzClass = dataRows.findIndex(r =>
+    r.classNames?.includes('myteam') || r.getAttribute('class')?.includes('myteam')
+  )
+  if (idxBlitzClass === 0) return { blitz: a, opponent: b }
+  if (idxBlitzClass === 1) return { blitz: b, opponent: a }
+
+  // ③ チーム名テキストで判定
   const name0 = dataRows[0].querySelectorAll('td')[0]?.text.trim() ?? ''
   const name1 = dataRows[1].querySelectorAll('td')[0]?.text.trim() ?? ''
-  const isBlitz0 = name0.toUpperCase().includes('BLITZ')
-  const isBlitz1 = name1.toUpperCase().includes('BLITZ')
+  if (name0.toUpperCase().includes('BLITZ')) return { blitz: a, opponent: b }
+  if (name1.toUpperCase().includes('BLITZ')) return { blitz: b, opponent: a }
 
-  if (isBlitz0) return { blitz: parseScores(dataRows[0]), opponent: parseScores(dataRows[1]) }
-  if (isBlitz1) return { blitz: parseScores(dataRows[1]), opponent: parseScores(dataRows[0]) }
-
-  // ③ 判定不能: 先攻=相手、後攻=BLITZ と仮定（多くの試合で後攻のため）
-  return { blitz: parseScores(dataRows[1]), opponent: parseScores(dataRows[0]) }
+  // ④ 判定不能: 先攻=相手、後攻=BLITZ と仮定
+  return { blitz: b, opponent: a }
 }
 
 /** 投手成績テーブルを抽出 */
@@ -385,9 +389,6 @@ async function main() {
       const placeMatch = html.match(/<p class="place">\s*([\s\S]*?)\s*<\/p>/)
       const place = placeMatch ? placeMatch[1].replace(/<[^>]+>/g, '').trim().replace(/\s+/g, ' ') : null
 
-      // イニングスコア
-      const inningData = parseInningScores(html)
-
       // 打者・投手成績
       const batting  = parseBattingStats(html)
       const pitching = parsePitchingStats(html)
@@ -413,6 +414,8 @@ async function main() {
         continue
       }
 
+      // イニングスコア（BLITZ得点と合計が一致する行をBLITZに割り当て）
+      const inningData = parseInningScores(html, dbGame.ourScore)
       const inningJson = inningData ? JSON.stringify(inningData) : null
       await prisma.game.update({
         where: { id: dbGame.id },
