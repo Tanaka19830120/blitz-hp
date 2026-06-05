@@ -115,6 +115,37 @@ async function saveGame(scheduleId: string, json: string, sendLine: boolean): Pr
   revalidatePath('/admin')
 }
 
+// ─── LINE 送信サーバーアクション（保存とは独立） ───────────────────────────────
+async function sendGameResultLine(scheduleId: string, json: string): Promise<void> {
+  'use server'
+  const data: ScoreBookData = JSON.parse(json)
+  const schedule = await prisma.schedule.findUnique({ where: { id: scheduleId } })
+  if (!schedule) return
+
+  const ourScore      = data.ourScore      ?? 0
+  const opponentScore = data.opponentScore ?? 0
+  const note          = data.note          ?? ''
+  let result: 'WIN' | 'LOSE' | 'DRAW'
+  if      (ourScore > opponentScore) result = 'WIN'
+  else if (ourScore < opponentScore) result = 'LOSE'
+  else                               result = 'DRAW'
+
+  const userIds = [
+    ...data.batters.map(b => b.userId).filter(Boolean),
+    ...data.pitchers.map(p => p.userId).filter(Boolean),
+  ]
+  const playerList = userIds.length > 0
+    ? await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } })
+    : []
+  const playerNames = new Map(playerList.map(p => [p.id, p.name ?? '']))
+  const msg = buildGameResult(
+    schedule,
+    { ourScore, opponentScore, result, note: note || null },
+    { scorebook: data, playerNames }
+  )
+  await sendToLineGroup(msg)
+}
+
 // ─── 写真保存サーバーアクション ───────────────────────────────────────────────
 async function saveScorePhoto(scheduleId: string, photoUrl: string): Promise<void> {
   'use server'
@@ -450,6 +481,7 @@ export default async function AdminGamePage({
                 initialData={initialScoreBook}
                 saveAction={saveGame}
                 savePhotoAction={saveScorePhoto}
+                sendLineAction={sendGameResultLine}
                 lineConfigured={lineConfigured}
                 scheduleInfo={{
                   date:     selected.date.toISOString(),

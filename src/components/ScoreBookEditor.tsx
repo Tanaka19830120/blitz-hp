@@ -44,6 +44,7 @@ interface Props {
   initialData:     ScoreBookData
   saveAction:      (scheduleId: string, json: string, sendLine: boolean) => Promise<void>
   savePhotoAction: (scheduleId: string, photoUrl: string) => Promise<void>
+  sendLineAction:  (scheduleId: string, json: string) => Promise<void>
   lineConfigured:  boolean
   scheduleInfo?:   { date: string; opponent: string }
 }
@@ -185,12 +186,12 @@ function deriveInningRbis(batters: BatterSlot[], innings: number): (number | nul
   return arr
 }
 
-export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, savePhotoAction, lineConfigured, scheduleInfo }: Props) {
+export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, savePhotoAction, sendLineAction, lineConfigured, scheduleInfo }: Props) {
   // デバッグ: scheduleInfo 確認
   /* ── スコア ── */
   // BLITZ得点はスコアブックの打点合計、相手得点はイニングスコア合計からライブ計算する
   const [note, setNote] = useState<string>(initialData.note ?? '')
-  const [sendLine, setSendLine] = useState(false)
+  const [lineSent, setLineSent] = useState(false)
 
   /* ── スコアブック ── */
   const [innings,  setInnings]  = useState<number>(initialData.innings)
@@ -637,8 +638,8 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
     setNote('')
   }
 
-  function handleSave() {
-    const data: ScoreBookData = {
+  function buildData(): ScoreBookData {
+    return {
       innings,
       batters,
       pitchers,
@@ -650,29 +651,41 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
       },
       note,
     }
-
-    // LINE 送信する場合はモーダルで確認
-    if (sendLine && scheduleInfo) {
-      const preview = buildLinePreview(scheduleInfo, String(ourRbiTotal), String(opponentScoreTotal), note, batters, pitchers, players)
-      setLinePreview(preview)
-      setPendingData(data)
-      setShowLineModal(true)
-      return
-    }
-
-    executeSave(data, false)
   }
 
-  // LINE モーダル: 送信して保存
+  // 保存（LINE送信は別ボタン）
+  function handleSave() {
+    executeSave(buildData(), false)
+  }
+
+  // LINE送信ボタン → 確認モーダルを開く
+  function handleOpenLine() {
+    if (!scheduleInfo) return
+    const preview = buildLinePreview(scheduleInfo, String(ourRbiTotal), String(opponentScoreTotal), note, batters, pitchers, players)
+    setLinePreview(preview)
+    setPendingData(buildData())
+    setShowLineModal(true)
+  }
+
+  // LINE モーダル: 送信（保存はしない）
   function handleLineConfirm() {
     setShowLineModal(false)
-    if (pendingData) executeSave(pendingData, true)
+    const data = pendingData
+    if (!data) return
+    startTransition(async () => {
+      try {
+        await sendLineAction(scheduleId, JSON.stringify(data))
+        setLineSent(true)
+        setTimeout(() => setLineSent(false), 4000)
+      } catch {
+        /* ignore */
+      }
+    })
   }
 
-  // LINE モーダル: キャンセル（LINE送信なしで保存）
+  // LINE モーダル: キャンセル（何もしない）
   function handleLineCancel() {
     setShowLineModal(false)
-    if (pendingData) executeSave(pendingData, false)
   }
 
   /* ── live stats ── */
@@ -1416,21 +1429,6 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
           💡 スコアブックを保存すると個人成績（打席・打数・安打・本塁打・打点・盗塁など）が自動反映されます
         </div>
 
-        {lineConfigured && (
-          <label className="flex items-center gap-2.5 cursor-pointer select-none w-full">
-            <input
-              type="checkbox"
-              checked={sendLine}
-              onChange={e => setSendLine(e.target.checked)}
-              style={{ width: '1.125rem', height: '1.125rem', flexShrink: 0 }}
-              className="cursor-pointer accent-[#22c55e]"
-            />
-            <span className="text-sm text-[#22c55e]">
-              保存後にLINEに試合結果を送信する
-            </span>
-          </label>
-        )}
-
         <button
           type="button" onClick={handleSave} disabled={isPending}
           className={`w-full text-sm px-4 py-3 rounded-xl border font-medium transition-all ${
@@ -1444,13 +1442,22 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
           }`}
         >
           {isPending
-            ? '⏳ 保存中...'
+            ? '⏳ 処理中...'
             : status === 'saved'
             ? '✅ 保存しました（個人成績に自動反映済み）'
             : status === 'error'
             ? '❌ エラーが発生しました'
             : '💾 試合結果を保存'}
         </button>
+
+        {lineConfigured && (
+          <button
+            type="button" onClick={handleOpenLine} disabled={isPending}
+            className="w-full text-sm px-4 py-3 rounded-xl border border-[#22c55e]/40 text-[#22c55e] font-medium hover:bg-[#22c55e]/10 transition-all disabled:opacity-40"
+          >
+            {lineSent ? '✅ LINEに送信しました' : '💬 試合結果をLINEに送信'}
+          </button>
+        )}
 
         <button
           type="button" onClick={resetResult} disabled={isPending}
