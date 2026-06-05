@@ -181,6 +181,20 @@ function parseInningScores(html: string, expectedBlitz?: number | null): { blitz
   return { blitz: b, opponent: a }
 }
 
+/** イニング表の2行の「合計(R)」を取得（ダブルヘッダー判別用、BLITZ未確定でOK） */
+function parseTotals(html: string): [number, number] | null {
+  const root = parseHTML(html)
+  const table = root.querySelectorAll('table')[0]
+  if (!table) return null
+  const dataRows = Array.from(table.querySelectorAll('tr')).filter(r => r.querySelectorAll('td').length > 2)
+  if (dataRows.length < 2) return null
+  const total = (tr: typeof dataRows[number]) => {
+    const cells = tr.querySelectorAll('td')
+    return toInt(cells[cells.length - 1]?.text.trim())
+  }
+  return [total(dataRows[0]), total(dataRows[1])]
+}
+
 /** 投手成績テーブルを抽出 */
 function parsePitchingStats(html: string) {
   const rows = tableRows(html, '投球回')
@@ -348,12 +362,14 @@ async function main() {
     promotedFormer.add(`${name.trim()}(#${num})`)
   }
 
-  // 日付+対戦相手 → Game マップ
-  const gameLookup = new Map<string, typeof allGames[number]>()
+  // 日付+対戦相手 → Game 群（ダブルヘッダー対応で配列）
+  const gameLookup = new Map<string, typeof allGames>()
   for (const g of allGames) {
     const key = `${g.schedule.date.toISOString().slice(0, 10)}_${g.schedule.opponent}`
-    gameLookup.set(key, g)
+    if (!gameLookup.has(key)) gameLookup.set(key, [])
+    gameLookup.get(key)!.push(g)
   }
+  const usedDbIds = new Set<string>()  // 既に紐付けたDB試合（重複割当防止）
 
   let success = 0, skipped = 0, failed = 0
 
@@ -395,15 +411,28 @@ async function main() {
 
       // DB の試合を検索
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let dbGame: typeof allGames[number] | undefined = (existing as any) ?? gameLookup.get(`${gameDate}_${opponentName}`)
+      let dbGame: typeof allGames[number] | undefined = (existing as any) ?? undefined
 
-      if (!dbGame && gameDate) {
-        const candidates = allGames.filter(g => {
-          const gDate = g.schedule.date.toISOString().slice(0, 10)
-          return gDate === gameDate && !g.teamsOneId
-        })
-        if (candidates.length === 1) {
-          dbGame = candidates[0]
+      if (!dbGame) {
+        const group = (gameLookup.get(`${gameDate}_${opponentName}`) ?? []).filter(g => !usedDbIds.has(g.id))
+        const totals = parseTotals(html)  // [合計0, 合計1]（順不同）
+        if (group.length === 1) {
+          dbGame = group[0]
+        } else if (group.length > 1 && totals) {
+          // ダブルヘッダー: スコア集合が一致するDB試合を選ぶ
+          dbGame = group.find(g =>
+            (g.ourScore === totals[0] && g.opponentScore === totals[1]) ||
+            (g.ourScore === totals[1] && g.opponentScore === totals[0])
+          ) ?? group[0]
+        } else if (group.length > 1) {
+          dbGame = group[0]
+        }
+        // 最後の手段: 同日でteamsOneId未設定が1件だけならそれ
+        if (!dbGame && gameDate) {
+          const cands = allGames.filter(g =>
+            g.schedule.date.toISOString().slice(0, 10) === gameDate && !g.teamsOneId && !usedDbIds.has(g.id)
+          )
+          if (cands.length === 1) dbGame = cands[0]
         }
       }
 
@@ -413,6 +442,7 @@ async function main() {
         await sleep(300)
         continue
       }
+      usedDbIds.add(dbGame.id)
 
       // イニングスコア（BLITZ得点と合計が一致する行をBLITZに割り当て）
       const inningData = parseInningScores(html, dbGame.ourScore)
