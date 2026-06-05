@@ -268,9 +268,13 @@ export default async function AdminLineupPage({
     })
     for (const a of atts) attendCounts.set(a.userId, (attendCounts.get(a.userId) ?? 0) + 1)
   }
-  const players = [...allUsers]
+  // スタメン選択肢は「現メンバー（正式アカウント=@b・助っ人でない）」のみ + 助っ人枠1〜4
+  const currentMembers = allUsers
+    .filter(u => !u.isGuest && u.email.endsWith('@b'))
     .sort((a, b) => (attendCounts.get(b.id) ?? 0) - (attendCounts.get(a.id) ?? 0))
-    .map(u => ({ id: u.id, name: u.name, number: u.number }))
+    .map(u => ({ id: u.id, name: u.name, number: u.number as number | null }))
+  const guestSlots = [1, 2, 3, 4].map(n => ({ id: `__guest_${n}`, name: `助っ人${n}`, number: null as number | null }))
+  const players = [...currentMembers, ...guestSlots]
 
   // ─── 日程グループ化 ────────────────────────────────────────────
   type SchedItem = typeof upcomingSchedules[number]
@@ -451,9 +455,10 @@ export default async function AdminLineupPage({
                     {activeSchedule.startTime && <span className="text-xs text-[#64748b]">▶ 開始 {activeSchedule.startTime}</span>}
                   </div>
 
-                  {/* エディタ */}
+                  {/* エディタ（key で試合切替時に再マウント＝他試合と連動しない） */}
                   <div className="glass-card rounded-2xl p-5">
                     <LineupEditor
+                      key={activeSchedule.id}
                       players={players}
                       scheduleId={activeSchedule.id}
                       initialData={initialData}
