@@ -152,7 +152,7 @@ function parseInningScores(html: string, expectedBlitz?: number | null): { blitz
       return (t === '-' || t === '' || t === 'x') ? null : toInt(t)
     })
   }
-  const sum = (arr: (number|null)[]) => arr.reduce((s, n) => s + (n ?? 0), 0)
+  const sum = (arr: (number|null)[]) => arr.reduce((s: number, n) => s + (n ?? 0), 0)
 
   const a = parseScores(dataRows[0])
   const b = parseScores(dataRows[1])
