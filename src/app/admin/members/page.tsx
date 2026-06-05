@@ -11,7 +11,26 @@ async function createMember(formData: FormData) {
   const name    = String(formData.get('name'))
   const numberRaw = formData.get('number')
   const number  = numberRaw && String(numberRaw).trim() !== '' ? parseInt(String(numberRaw)) : null
-  // ログインID: 背番号があればそのまま文字列、なければ名前からフォールバック
+  const isGuest = String(formData.get('category')) === 'guest'
+
+  if (isGuest) {
+    // 助っ人: ログイン不要。@b でない一意メールで作成（成績/メンバー一覧からは除外される）
+    const email = `guest_${Date.now()}_${Math.random().toString(36).slice(2, 8)}@guest`
+    const password = await bcrypt.hash(Math.random().toString(36), 10)
+    await prisma.user.create({
+      data: {
+        name, email, password,
+        role: 'PLAYER',
+        number,
+        position: String(formData.get('position') || '') || null,
+        isGuest: true,
+      },
+    })
+    revalidatePath('/members'); revalidatePath('/admin')
+    redirect(`/admin/members?toast=${encodeURIComponent('助っ人を追加しました')}`)
+  }
+
+  // 現メンバー: ログインID = 背番号（なければ名前）、初期PW = ログインID×2
   const loginId = number != null ? String(number) : name.toLowerCase().replace(/\s+/g, '')
   const email   = `${loginId}@b`
   const password = await bcrypt.hash(`${loginId}${loginId}`, 10)
@@ -182,15 +201,25 @@ export default async function AdminMembersPage({
       ) : (
         /* Add form */
         <div className="glass-card rounded-2xl p-6 mb-8">
-          <h2 className="text-sm font-bold text-[#94a3b8] mb-1">メンバーを追加</h2>
-          <p className="text-[11px] text-[#475569] mb-4">ログインID＝背番号、パスワード＝背番号×2（例: 28 / 2828）で自動設定されます。</p>
+          <h2 className="text-sm font-bold text-[#94a3b8] mb-1">メンバー / 助っ人を追加</h2>
+          <p className="text-[11px] text-[#475569] mb-4">
+            現メンバーはログインID＝背番号、パスワード＝背番号×2（例: 28 / 2828）で自動設定。<br />
+            助っ人はログイン不可で、メンバー一覧・個人成績ランキングには出ません（試合結果には表示）。
+          </p>
           <form action={createMember} className="grid gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className="block text-xs text-[#64748b] mb-1.5">種別 *</label>
+              <select name="category">
+                <option value="member">現メンバー</option>
+                <option value="guest">助っ人</option>
+              </select>
+            </div>
             <div>
               <label className="block text-xs text-[#64748b] mb-1.5">名前 *</label>
               <input type="text" name="name" required placeholder="山田 太郎" />
             </div>
             <div>
-              <label className="block text-xs text-[#64748b] mb-1.5">背番号</label>
+              <label className="block text-xs text-[#64748b] mb-1.5">背番号 <span className="text-[#475569]">（助っ人は任意）</span></label>
               <input type="number" name="number" placeholder="例: 7" min="0" max="99" />
             </div>
             <div>
@@ -198,7 +227,7 @@ export default async function AdminMembersPage({
               <input type="text" name="position" placeholder="例: ショート" />
             </div>
             <div>
-              <label className="block text-xs text-[#64748b] mb-1.5">権限</label>
+              <label className="block text-xs text-[#64748b] mb-1.5">権限 <span className="text-[#475569]">（現メンバーのみ）</span></label>
               <select name="role">
                 <option value="PLAYER">選手</option>
                 <option value="ADMIN">管理者</option>
