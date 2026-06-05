@@ -113,11 +113,20 @@ async function seedMasters(formData: FormData) {
 // ─── Page ────────────────────────────────────────────────────────
 
 export default async function AdminMastersPage() {
-  const [opponents, locations, gameTypeLabels] = await Promise.all([
+  const [opponents, locations, gameTypeLabels, allUsers] = await Promise.all([
     getMasterList('opponentMaster'),
     getMasterList('locationMaster'),
     getGameTypeLabels(),
+    prisma.user.findMany({
+      select: { id: true, name: true, number: true, position: true, email: true, isGuest: true, _count: { select: { gameStats: true } } },
+      orderBy: [{ number: 'asc' }, { name: 'asc' }],
+    }),
   ])
+
+  // カテゴリ分け: 現メンバー(@b・助っ人でない) / 元メンバー(@guest・助っ人でない) / 助っ人(isGuest)
+  const currentMembers = allUsers.filter(u => !u.isGuest && u.email.endsWith('@b'))
+  const formerMembers  = allUsers.filter(u => !u.isGuest && !u.email.endsWith('@b'))
+  const guests         = allUsers.filter(u => u.isGuest)
 
   return (
     <div className="pt-16 max-w-3xl mx-auto px-4 py-12 space-y-10">
@@ -218,6 +227,49 @@ export default async function AdminMastersPage() {
           ))}
           <SubmitButton pendingLabel="保存中…" className="btn-primary w-full py-2.5 mt-2">ラベルを保存</SubmitButton>
         </form>
+      </section>
+
+      {/* ── 選手マスタ ── */}
+      <section className="glass-card rounded-2xl p-6">
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-sm font-bold text-[#60a5fa] tracking-widest uppercase">選手マスタ</h2>
+          <span className="text-xs text-[#475569]">計 {allUsers.length}名</span>
+        </div>
+        <p className="text-xs text-[#475569] mb-5">
+          登録されている全選手。名前・背番号の編集は<Link href="/admin/members" className="text-[#60a5fa] hover:underline">メンバー管理</Link>から。
+        </p>
+
+        {([
+          { label: '現メンバー', list: currentMembers, color: 'text-[#22c55e]', desc: 'ログイン可能な現役メンバー' },
+          { label: '元メンバー', list: formerMembers, color: 'text-[#94a3b8]', desc: '過去に在籍（背番号あり・脱退）' },
+          { label: '助っ人',     list: guests,        color: 'text-[#a78bfa]', desc: '過去に参加した助っ人（背番号なし）' },
+        ] as const).map(({ label, list, color, desc }) => (
+          <div key={label} className="mb-5 last:mb-0">
+            <div className="flex items-center gap-2 mb-2">
+              <span className={`text-xs font-bold ${color}`}>{label}</span>
+              <span className="text-[10px] text-[#475569]">{list.length}名 ・ {desc}</span>
+            </div>
+            {list.length === 0 ? (
+              <p className="text-xs text-[#475569]">（なし）</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {list.map(u => (
+                  <Link
+                    key={u.id}
+                    href={`/admin/members?edit=${u.id}`}
+                    className="flex items-center gap-1.5 bg-[#0d1b2a] border border-[#1e3a5f] rounded-lg px-2.5 py-1 text-xs hover:border-[#2563eb]/50 transition-colors"
+                    title={`${u.position ?? ''} 試合数${u._count.gameStats}`}
+                  >
+                    {u.number != null && <span className="text-[#475569]">#{u.number}</span>}
+                    <span className="text-[#e2e8f0]">{u.name}</span>
+                    {u.position && <span className="text-[#64748b]">{u.position}</span>}
+                    <span className="text-[#3b4f6a]">{u._count.gameStats}試</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
       </section>
     </div>
   )
