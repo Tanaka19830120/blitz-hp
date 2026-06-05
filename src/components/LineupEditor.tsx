@@ -222,6 +222,16 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
     setSlots(prev => prev.filter((_, i) => i !== idx))
   }
 
+  // ─── 入力内容をリセット（9枠の空打順に戻す） ───
+  function resetLineup() {
+    if (!window.confirm('入力中のスタメン（打順・守備・FP・審判・ベンチ・メモ）をすべてクリアします。よろしいですか？')) return
+    setSlots(Array.from({ length: 9 }, () => ({ first: empty(), second: empty() })))
+    setFpSlots([])
+    setUmpires([])
+    setBench([])
+    setNote('')
+  }
+
   // ─── FP ────────────────────────────────────────────────────
   function changeFpPlayer(idx: number, newId: string) {
     const next = fpSlots.map(f => ({ ...f }))
@@ -541,6 +551,14 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
             : saveState === 'saved'
               ? '✓ 保存しました'
               : 'スタメンを保存'}
+        </button>
+        <button
+          type="button"
+          onClick={resetLineup}
+          disabled={isPending}
+          className="px-4 py-2.5 rounded-xl border border-[#1e3a5f] text-[#94a3b8] hover:text-[#ef4444] hover:border-[#ef4444]/50 transition-all disabled:opacity-40 whitespace-nowrap"
+        >
+          🗑 リセット
         </button>
       </div>
     </div>

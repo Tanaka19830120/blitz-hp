@@ -211,8 +211,8 @@ export default async function AdminPage() {
           <Link href="/admin/contact" className="glass-card rounded-xl p-5 hover:border-[#2563eb]/40 transition-all flex items-center gap-4">
             <div className="w-10 h-10 rounded-lg bg-[#16a34a]/20 flex items-center justify-center text-[#22c55e] text-xl">📨</div>
             <div>
-              <div className="font-semibold text-[#e2e8f0]">問い合わせ通知先</div>
-              <div className="text-xs text-[#64748b]">LINEで受け取る人を設定</div>
+              <div className="font-semibold text-[#e2e8f0]">お問い合わせ一覧</div>
+              <div className="text-xs text-[#64748b]">受信した問い合わせを確認</div>
             </div>
           </Link>
           <Link href="/admin/help" className="glass-card rounded-xl p-5 hover:border-[#2563eb]/40 transition-all flex items-center gap-4">

@@ -192,3 +192,16 @@ model Photo {
 
   @@index([albumId])
 }
+
+// ── お問い合わせ ──
+model Inquiry {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  type      String
+  message   String
+  handled   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}

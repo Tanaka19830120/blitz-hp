@@ -89,6 +89,23 @@ async function main() {
     console.log('✓ PhotoAlbum / Photo tables ready')
   } catch { /* already exists */ }
 
+  // v10: お問い合わせ
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS "Inquiry" (
+      "id"        TEXT PRIMARY KEY,
+      "name"      TEXT NOT NULL,
+      "email"     TEXT NOT NULL,
+      "type"      TEXT NOT NULL,
+      "message"   TEXT NOT NULL,
+      "handled"   BOOLEAN NOT NULL DEFAULT 0,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `)
+  try {
+    await client.execute(`CREATE INDEX IF NOT EXISTS "Inquiry_createdAt_idx" ON "Inquiry"("createdAt");`)
+    console.log('✓ Inquiry table ready')
+  } catch { /* already exists */ }
+
   console.log('Migrations complete.')
   await client.close()
 }
