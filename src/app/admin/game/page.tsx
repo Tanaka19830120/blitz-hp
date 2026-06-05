@@ -240,11 +240,12 @@ export default async function AdminGamePage({
   const lineupPlayerIds = dataPlayerIds.size > 0
     ? dataPlayerIds
     : new Set(lineup.map(l => l.userId))
-  const lineupPlayers   = allPlayers.filter(p => lineupPlayerIds.has(p.id) && !p.isGuest)
-  const otherPlayers    = allPlayers.filter(p => !lineupPlayerIds.has(p.id) && !p.isGuest)
-  const guestPlayers    = allPlayers.filter(p => p.isGuest)
-  // 助っ人は選択肢の末尾に回す（通常メンバーを優先表示）
-  const sortedPlayers   = [...lineupPlayers, ...otherPlayers, ...guestPlayers]
+  // 現メンバー = 正式ログインアカウント(@b)かつ助っ人でない
+  const isCurrent = (p: typeof allPlayers[number]) => !p.isGuest && p.email.endsWith('@b')
+  const lineupPlayers = allPlayers.filter(p => lineupPlayerIds.has(p.id) && isCurrent(p))
+  const otherCurrent  = allPlayers.filter(p => !lineupPlayerIds.has(p.id) && isCurrent(p))
+  const nonMembers    = allPlayers.filter(p => !isCurrent(p))  // 元メンバー・助っ人は末尾へ
+  const sortedPlayers = [...lineupPlayers, ...otherCurrent, ...nonMembers]
 
   // lineupForBook を打順→{userId,position,position2} マップに変換（マージ用）
   const lineupByOrder = new Map(
