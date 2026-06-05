@@ -272,17 +272,18 @@ async function main() {
   }
 
   function resolveUserId(name: string, jerseyNumber: string): string | undefined {
-    // 1. 背番号（"-" や空白はスキップ）
+    // 1. 名前を最優先（背番号の衝突: 7 と 07 が同じ7になる問題を回避）
+    const byNorm = nameToUserId[normName(name)]
+    if (byNorm) return byNorm
+    const byExact = nameToUserId[name.trim()]
+    if (byExact) return byExact
+    // 2. 背番号（名前で一致しない場合のフォールバック。"-"/空はスキップ）
     const num = parseInt(jerseyNumber, 10)
     if (!isNaN(num) && num > 0) {
       const byNum = numberToUserId[num]
       if (byNum) return byNum
     }
-    // 2. 正規化名
-    const byNorm = nameToUserId[normName(name)]
-    if (byNorm) return byNorm
-    // 3. そのまま
-    return nameToUserId[name.trim()]
+    return undefined
   }
 
   // 未一致の選手を作成・再利用。
