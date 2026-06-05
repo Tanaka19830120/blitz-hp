@@ -623,6 +623,20 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
     })
   }
 
+  // 入力した試合結果をリセット（打撃成績・イニング・投手・コメントをクリア。打順/守備/選手は維持）
+  function resetResult() {
+    if (!window.confirm('入力した試合結果（打撃成績・イニングスコア・投手成績・コメント）をクリアします。打順・守備・選手はそのまま残します。よろしいですか？')) return
+    setBatters(prev => prev.map(b => ({
+      ...b,
+      cells: {},
+      subs: (b.subs ?? []).map(s => ({ ...s, cells: {} })),
+    })))
+    setPitchers([])
+    setOurInnings(Array(innings).fill(null))
+    setOpponentInnings(Array(innings).fill(null))
+    setNote('')
+  }
+
   function handleSave() {
     const data: ScoreBookData = {
       innings,
@@ -1436,6 +1450,13 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
             : status === 'error'
             ? '❌ エラーが発生しました'
             : '💾 試合結果を保存'}
+        </button>
+
+        <button
+          type="button" onClick={resetResult} disabled={isPending}
+          className="w-full text-xs px-4 py-2.5 rounded-xl border border-[#1e3a5f] text-[#94a3b8] hover:text-[#ef4444] hover:border-[#ef4444]/50 transition-all disabled:opacity-40"
+        >
+          🗑 入力した試合結果をリセット
         </button>
       </div>
     </div>
