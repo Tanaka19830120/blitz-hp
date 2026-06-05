@@ -247,9 +247,11 @@ export default async function AdminPage() {
                 : primary._count.attendances
               const hasGame = group.some(s => s.game?.id)
 
+              const labelOf = (s: typeof primary) =>
+                s.type === 'EVENT' ? `🎉 ${s.opponent || 'イベント'}` : `vs ${s.opponent}`
               const opponentLabel = isMulti
-                ? group.map((s, i) => `第${i + 1}試合 vs ${s.opponent}`).join(' / ')
-                : `vs ${primary.opponent}`
+                ? group.map((s, i) => `第${i + 1}試合 ${labelOf(s)}`).join(' / ')
+                : labelOf(primary)
 
               return (
                 <div key={primary.id} className="glass-card rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
