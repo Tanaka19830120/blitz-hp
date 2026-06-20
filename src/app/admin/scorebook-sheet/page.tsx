@@ -155,30 +155,46 @@ export default async function ScoreBookSheetPage({
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          @page { size: A4 landscape; margin: 6mm; }
+          @page sheet1 { size: A4 landscape; margin: 6mm; }
+          @page sheet2 { size: A4 portrait; margin: 8mm; }
           body { visibility: hidden !important; background: white !important;
                  margin: 0 !important; padding: 0 !important; }
           .print-wrap { visibility: visible !important; position: absolute !important;
                         top: 0 !important; left: 0 !important; width: 100% !important; }
           .print-wrap * { visibility: visible !important; }
-          .sheet, .sheet-2 {
+          .sheet {
+            page: sheet1;
             box-shadow: none !important; margin: 0 !important; padding: 0 !important;
             min-height: unset !important; width: 100% !important;
             display: block !important;
           }
+          .sheet-2 {
+            page: sheet2;
+            box-shadow: none !important; margin: 0 !important; padding: 0 !important;
+            min-height: unset !important; width: 100% !important;
+            display: block !important;
+          }
+          .punch-spacer { height: 14mm !important; display: block !important; }
           .no-print { display: none !important; }
           .page-break { break-before: page !important; page-break-before: always !important; }
         }
         @media screen {
           body { background: #8a9ab0 !important; }
-          .sheet, .sheet-2 {
+          .sheet {
             width: 297mm; min-height: 210mm;
             margin: 0 auto; padding: 4mm;
             background: white;
             box-shadow: 0 4px 20px rgba(0,0,0,0.35);
             box-sizing: border-box;
           }
-          .sheet-2 { margin-top: 12px; }
+          .sheet-2 {
+            width: 210mm; min-height: 297mm;
+            margin: 12px auto 0; padding: 6mm;
+            background: white;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+            box-sizing: border-box;
+          }
+          .punch-spacer { height: 0; }
         }
         .inn-cell {
           height: 14mm; min-height: 14mm;
@@ -210,6 +226,8 @@ export default async function ScoreBookSheetPage({
       <div className="print-wrap">
       {/* ─── 1枚目: スコアシート ─── */}
       <div className="sheet">
+        {/* パンチ穴スペース（印刷時のみ高さが出る） */}
+        <div className="punch-spacer" />
 
         {/* ① ヘッダー */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '2mm', height: '8mm', minHeight: '8mm' }}>
