@@ -151,15 +151,15 @@ export default async function ScoreBookSheetPage({
         @media print {
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
           @page { size: A4 landscape; margin: 6mm; }
-          html, body { margin: 0 !important; padding: 0 !important; background: white !important;
-                       height: auto !important; overflow: visible !important; }
+          /* body全体を不可視にして .sheet だけ表示 */
+          body { visibility: hidden !important; background: white !important;
+                 margin: 0 !important; padding: 0 !important; }
+          .sheet { visibility: visible !important; position: absolute !important;
+                   top: 0 !important; left: 0 !important; width: 100% !important;
+                   box-shadow: none !important; margin: 0 !important; padding: 0 !important;
+                   min-height: unset !important; }
+          .sheet * { visibility: visible !important; }
           .no-print { display: none !important; }
-          .sheet {
-            box-shadow: none !important; width: 100% !important;
-            margin: 0 !important; padding: 0 !important;
-            min-height: unset !important; page-break-after: avoid;
-            page-break-inside: avoid; overflow: visible !important;
-          }
         }
         @media screen {
           body { background: #8a9ab0 !important; }
@@ -222,6 +222,7 @@ export default async function ScoreBookSheetPage({
       }}>
         <Link href="/admin/game" style={{ color: '#94a3b8', fontSize: '13px', textDecoration: 'none' }}>← 試合入力</Link>
         <span style={{ color: '#e2e8f0', fontWeight: 'bold', fontSize: '14px' }}>スコア記入シート（7回）</span>
+        <Link href="/admin/scorebook-example" style={{ color: '#60a5fa', fontSize: '13px', textDecoration: 'none', marginLeft: '8px' }}>📖 記入例・解説</Link>
         <PrintButton />
       </div>
 
@@ -435,7 +436,7 @@ export default async function ScoreBookSheetPage({
               {[0, 1].map(ri => (
                 <tr key={ri}>
                   {Array.from({ length: 8 }, (_, ci) => (
-                    <td key={ci} style={{ ...cell, height: '5mm', background: 'white' }} />
+                    <td key={ci} style={{ ...cell, height: '4mm', background: 'white' }} />
                   ))}
                 </tr>
               ))}
@@ -462,8 +463,29 @@ export default async function ScoreBookSheetPage({
           )}
         </div>
 
-        {/* ④ フッター: 外角BL/BR のみ */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1mm' }}>
+        {/* ④ 簡易凡例 */}
+        <div style={{ marginTop: '0.5mm', fontFamily: font, fontSize: '6.5pt', color: '#222', lineHeight: 1.3 }}>
+          <div style={{ display: 'flex', gap: '3mm', flexWrap: 'wrap', borderTop: '0.7pt solid #aaa', paddingTop: '0.5mm' }}>
+            <span style={{ fontWeight: 'bold', color: '#555', flexShrink: 0 }}>【打撃】</span>
+            {[
+              ['K', '空振三振'], ['Kc', '見逃三振'], ['H', '安打'], ['2B', '二塁打'], ['3B', '三塁打'], ['HR', '本塁打'],
+              ['BB', '四球'], ['G', 'ゴロ'], ['F', 'フライ'], ['L', 'ライナー'],
+              ['E', 'エラー'], ['FC', 'FC'], ['DP', '併殺'], ['SAC', '犠打'], ['SF', '犠飛'],
+            ].map(([code, label]) => (
+              <span key={code}><b>{code}</b>={label}</span>
+            ))}
+            <span style={{ borderLeft: '0.5pt solid #ccc', paddingLeft: '4mm', fontWeight: 'bold', color: '#555' }}>【守備番号】</span>
+            {[['1','投'],['2','捕'],['3','一'],['4','二'],['5','三'],['6','遊'],['7','左'],['8','中'],['9','右']].map(([n,p]) => (
+              <span key={n}><b>{n}</b>={p}</span>
+            ))}
+            <span style={{ borderLeft: '0.5pt solid #ccc', paddingLeft: '4mm', fontWeight: 'bold', color: '#555' }}>【打席欄】</span>
+            <span>上段=1巡目　下段=2巡目　右小欄=打点</span>
+            <span>例: <b>G63</b>=遊→一ゴロ　<b>F8</b>=中飛　<b>K</b>=三振</span>
+          </div>
+        </div>
+
+        {/* ⑤ フッター: 外角BL/BR のみ */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5mm' }}>
           <OuterMark />
           <div style={{ flex: 1 }} />
           <OuterMark />

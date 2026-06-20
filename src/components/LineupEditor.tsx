@@ -187,9 +187,11 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
     const ns = slots.map(s => ({ first: { ...s.first }, second: { ...s.second } }))
     const nf = fpSlots.map(f => ({ ...f }))
 
-    // 後半の実効ポジションを返す（second.positionが空の場合、前半と同じ選手なら first.position にフォールバック）
-    // "前半と同じ選手" = second.playerId が '' か first.playerId と一致
+    // 後半の実効ポジションを返す
+    // '─' = 意図的に守備なし（前半ポジションを継承しない）
+    // ''  = 前半と同じ選手なら first.position を継承
     const effectiveSecondPos = (s: OrderSlot) => {
+      if (s.second.position === '─') return ''
       if (s.second.position !== '') return s.second.position
       const samePlayer = s.second.playerId === '' || s.second.playerId === s.first.playerId
       return samePlayer ? s.first.position : ''
@@ -392,6 +394,7 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
               <select value={slot.second.position} onChange={e => updateSecondPos(idx, e.target.value)}
                 className={sCls} style={{ borderColor: slot.second.playerId ? '#f59e0b40' : undefined }}>
                 <option value=""> </option>
+                <option value="─">─なし</option>
                 {availableSecondPos(idx).map(p => <option key={p} value={p}>{p}</option>)}
               </select>
 

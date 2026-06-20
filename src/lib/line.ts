@@ -13,7 +13,11 @@ const LINE_PUSH_API = 'https://api.line.me/v2/bot/message/push'
 
 async function resolveLineCredentials(): Promise<{ token: string; groupId: string } | null> {
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN
-  const groupId = process.env.LINE_GROUP_ID
+  // 優先順: DB(teamLineGroupId) → 環境変数(LINE_GROUP_ID) → DB(detectedLineGroupId)
+  const groupId = await prisma.setting.findUnique({ where: { key: 'teamLineGroupId' } })
+    .then(s => s?.value ?? '')
+    .catch(() => '')
+    || process.env.LINE_GROUP_ID
     || await prisma.setting.findUnique({ where: { key: 'detectedLineGroupId' } }).then(s => s?.value ?? '').catch(() => '')
   if (!token || !groupId) return null
   return { token, groupId }
@@ -21,6 +25,37 @@ async function resolveLineCredentials(): Promise<{ token: string; groupId: strin
 
 export async function sendToLineGroup(text: string): Promise<{ ok: boolean; error?: string }> {
   return sendTextsToLineGroup([text])
+}
+
+/** 管理者専用グループへ送信（adminLineGroupId が未設定なら通常グループへ送信） */
+export async function sendToAdminLineGroup(text: string): Promise<{ ok: boolean; error?: string }> {
+  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN
+  if (!token) return { ok: false, error: 'LINE_CHANNEL_ACCESS_TOKEN が未設定です' }
+
+  // adminLineGroupId を優先、なければ通常グループへフォールバック
+  const adminGroupId = await prisma.setting
+    .findUnique({ where: { key: 'adminLineGroupId' } })
+    .then(s => s?.value ?? '')
+    .catch(() => '')
+
+  if (adminGroupId) {
+    try {
+      const res = await fetch(LINE_PUSH_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          to: adminGroupId,
+          messages: [{ type: 'text', text }],
+        }),
+      })
+      return res.ok ? { ok: true } : { ok: false, error: `LINE API error: ${res.status}` }
+    } catch (e) {
+      return { ok: false, error: String(e) }
+    }
+  }
+
+  // 管理者グループ未設定 → 通常グループへ送信
+  return sendToLineGroup(text)
 }
 
 /** 複数テキストを1回のプッシュで送信（LINE API 上限: 5メッセージ/回） */
@@ -307,15 +342,26 @@ export function buildLineupFromJson(
     const pos1 = s.first.position === 'DP' ? 'DP(打)' : s.first.position
     let line = `${i + 1}番 ${pos1 ? pos1 + ' ' : ''}${p1.name}`
 
+    // '─' = 意図的に守備なし（前半ポジションを継承しない）
+    const secondPos = s.second.position === '─' ? '' : s.second.position
+
     // 後半で別の選手に交代
     if (s.second.playerId && s.second.playerId !== s.first.playerId) {
       const p2   = pm.get(s.second.playerId)
-      const pos2 = s.second.position === 'DP' ? 'DP(打)' : s.second.position
+      const pos2 = secondPos === 'DP' ? 'DP(打)' : secondPos
       if (p2) line += ` → 後半: ${pos2 ? pos2 + ' ' : ''}${p2.name}`
-    } else if (s.second.playerId === s.first.playerId && s.second.position && s.second.position !== s.first.position) {
-      // 同じ選手でポジション変更
-      const pos2 = s.second.position === 'DP' ? 'DP(打)' : s.second.position
-      line += ` → 後半: ${pos2}`
+    } else {
+      // 同じ選手：後半の守備が変わる場合のみ注記
+      const samePlayer = !s.second.playerId || s.second.playerId === s.first.playerId
+      if (samePlayer) {
+        if (s.second.position === '─' && s.first.position && s.first.position !== 'DP') {
+          // 後半は守備から退く
+          line += ` → 後半: 守備なし`
+        } else if (secondPos && secondPos !== s.first.position) {
+          const pos2 = secondPos === 'DP' ? 'DP(打)' : secondPos
+          line += ` → 後半: ${pos2}`
+        }
+      }
     }
     lines.push(line)
   }
@@ -367,6 +413,7 @@ export function buildGameResult(
     `${fmt(schedule.date)} vs ${schedule.opponent}`,
     `━━━━━━━━━━━━`,
     `BLITZ ${game.ourScore} ー ${game.opponentScore} ${schedule.opponent}`,
+    `https://blitz-hp.vercel.app/results/${schedule.id}`,
     ``,
     emoji,
     game.note ? `\n${game.note}` : null,
@@ -420,10 +467,6 @@ export function buildGameResult(
       }
     }
   }
-
-  lines.push(``)
-  lines.push(`📊 試合結果はこちら`)
-  lines.push(`https://blitz-hp.vercel.app/results/${schedule.id}`)
 
   return lines.filter(Boolean).join('\n')
 }

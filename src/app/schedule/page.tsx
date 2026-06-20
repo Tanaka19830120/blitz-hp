@@ -4,14 +4,13 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getGameTypeLabels } from '@/lib/settings'
 import { mapsUrl } from '@/lib/maps'
+import AttendanceButtons from '@/components/AttendanceButtons'
+import { PastSchedulesCollapse } from '@/components/PastSchedulesCollapse'
 
-async function updateAttendance(formData: FormData) {
+async function updateAttendance(scheduleId: string, status: 'ATTENDING' | 'ABSENT' | 'MAYBE') {
   'use server'
   const session = await auth()
   if (!session?.user?.id) return
-
-  const scheduleId = String(formData.get('scheduleId'))
-  const status = String(formData.get('status')) as 'ATTENDING' | 'ABSENT' | 'MAYBE'
 
   // 同日グループ全試合の出欠を同時更新
   const schedule = await prisma.schedule.findUnique({ where: { id: scheduleId } })
@@ -79,14 +78,13 @@ export default async function SchedulePage() {
 
   const [rawSchedules, gameTypeLabels, members] = await Promise.all([
     prisma.schedule.findMany({
-      where:   { date: { gte: new Date(now.getFullYear(), now.getMonth(), 1) } },
-      orderBy: { date: 'asc' },
+      orderBy: { date: 'desc' },
       include: {
         attendances: {
           include: { user: { select: { id: true, name: true } } },
         },
       },
-      take: 40,
+      take: 100,
     }),
     getGameTypeLabels(),
     // 現メンバー（未回答の算出用）
@@ -98,22 +96,11 @@ export default async function SchedulePage() {
   ])
 
   const schedules = rawSchedules as ScheduleRow[]
-  const groups = groupSchedules(schedules)
+  const allGroups = groupSchedules(schedules)
+  const upcomingGroups = allGroups.filter(g => new Date(g[0].date) >= now).reverse()
+  const pastGroups     = allGroups.filter(g => new Date(g[0].date) <  now)
 
-  return (
-    <div className="pt-16 max-w-7xl mx-auto px-4 py-12">
-      <div className="mb-8">
-        <h1 className="text-3xl font-black text-[#e2e8f0] mb-2">日程・出欠</h1>
-        <p className="text-[#64748b]">試合・練習の日程と出欠状況</p>
-      </div>
-
-      {groups.length === 0 ? (
-        <div className="glass-card rounded-2xl p-12 text-center text-[#64748b]">
-          予定されている日程はありません
-        </div>
-      ) : (
-        <div className="flex flex-col gap-4">
-          {groups.map((group) => {
+  function renderGroup(group: ScheduleRow[]) {
             const primary = group[0]
             const isMulti = group.length > 1
 
@@ -142,8 +129,8 @@ export default async function SchedulePage() {
               primary.type === 'EVENT'      ? 'text-[#a78bfa] border-[#7c3aed]/40 bg-[#7c3aed]/10' :
                                               'text-[#94a3b8] border-[#1e3a5f] bg-[#1e3a5f]/20'
 
-            return (
-              <div key={primary.id} className={`glass-card rounded-2xl p-6 ${isPast ? 'opacity-60' : ''}`}>
+    return (
+      <div key={primary.id} className={`glass-card rounded-2xl p-6 ${isPast ? 'opacity-60' : ''}`}>
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                   <div className="flex-1">
                     <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -215,33 +202,12 @@ export default async function SchedulePage() {
                           あなたの出欠: <span className={cls}>{label}</span>
                           {isMulti && <span className="text-[#475569] ml-1">（全試合共通）</span>}
                         </div>
-                        <form action={updateAttendance} className="flex gap-2">
-                          <input type="hidden" name="scheduleId" value={primary.id} />
-                          <button name="status" value="ATTENDING" type="submit"
-                            className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-all ${
-                              myAttendance?.status === 'ATTENDING'
-                                ? 'bg-green-900/40 border-green-600/50 text-green-400'
-                                : 'border-[#1e3a5f] text-[#64748b] hover:border-green-600/50 hover:text-green-400'
-                            }`}>
-                            ✓ 参加
-                          </button>
-                          <button name="status" value="ABSENT" type="submit"
-                            className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-all ${
-                              myAttendance?.status === 'ABSENT'
-                                ? 'bg-red-900/40 border-red-600/50 text-red-400'
-                                : 'border-[#1e3a5f] text-[#64748b] hover:border-red-600/50 hover:text-red-400'
-                            }`}>
-                            ✗ 欠席
-                          </button>
-                          <button name="status" value="MAYBE" type="submit"
-                            className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-all ${
-                              myAttendance?.status === 'MAYBE'
-                                ? 'bg-yellow-900/40 border-yellow-600/50 text-yellow-400'
-                                : 'border-[#1e3a5f] text-[#64748b] hover:border-yellow-600/50 hover:text-yellow-400'
-                            }`}>
-                            ? 未定
-                          </button>
-                        </form>
+                        <AttendanceButtons
+                          scheduleId={primary.id}
+                          currentStatus={(myAttendance?.status as 'ATTENDING' | 'ABSENT' | 'MAYBE' | null) ?? null}
+                          isMulti={isMulti}
+                          updateAction={updateAttendance}
+                        />
                       </div>
                     )}
                   </div>
@@ -282,10 +248,39 @@ export default async function SchedulePage() {
                     )}
                   </div>
                 </div>
-              </div>
-            )
-          })}
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 py-12">
+      <div className="mb-8">
+        <h1 className="text-3xl font-black text-[#e2e8f0] mb-2">日程・出欠</h1>
+        <p className="text-[#64748b]">試合・練習の日程と出欠状況</p>
+      </div>
+
+      {upcomingGroups.length === 0 && pastGroups.length === 0 ? (
+        <div className="glass-card rounded-2xl p-12 text-center text-[#64748b]">
+          予定されている日程はありません
         </div>
+      ) : (
+        <>
+          {upcomingGroups.length === 0 ? (
+            <div className="glass-card rounded-2xl p-8 text-center text-[#64748b] mb-4">
+              今後の予定はありません
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {upcomingGroups.map(renderGroup)}
+            </div>
+          )}
+
+          {pastGroups.length > 0 && (
+            <PastSchedulesCollapse count={pastGroups.length}>
+              {pastGroups.map(renderGroup)}
+            </PastSchedulesCollapse>
+          )}
+        </>
       )}
     </div>
   )
