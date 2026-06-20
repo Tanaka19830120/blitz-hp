@@ -158,18 +158,16 @@ export default async function ScoreBookSheetPage({
           @page { size: A4 landscape; margin: 6mm; }
           body { visibility: hidden !important; background: white !important;
                  margin: 0 !important; padding: 0 !important; }
-          .sheet { visibility: visible !important; position: absolute !important;
-                   top: 0 !important; left: 0 !important; width: 100% !important;
-                   box-shadow: none !important; margin: 0 !important; padding: 0 !important;
-                   min-height: unset !important; }
-          .sheet * { visibility: visible !important; }
-          .sheet-2 { visibility: visible !important; position: absolute !important;
-                     top: 0 !important; left: 0 !important; width: 100% !important;
-                     box-shadow: none !important; margin: 0 !important; padding: 0 !important;
-                     min-height: unset !important; }
-          .sheet-2 * { visibility: visible !important; }
+          .print-wrap { visibility: visible !important; position: absolute !important;
+                        top: 0 !important; left: 0 !important; width: 100% !important; }
+          .print-wrap * { visibility: visible !important; }
+          .sheet, .sheet-2 {
+            box-shadow: none !important; margin: 0 !important; padding: 0 !important;
+            min-height: unset !important; width: 100% !important;
+            display: block !important;
+          }
           .no-print { display: none !important; }
-          .page-break { break-before: page; page-break-before: always; }
+          .page-break { break-before: page !important; page-break-before: always !important; }
         }
         @media screen {
           body { background: #8a9ab0 !important; }
@@ -181,7 +179,6 @@ export default async function ScoreBookSheetPage({
             box-sizing: border-box;
           }
           .sheet-2 { margin-top: 12px; }
-          .page-break {}
         }
         .inn-cell {
           height: 14mm; min-height: 14mm;
@@ -210,6 +207,7 @@ export default async function ScoreBookSheetPage({
         <PrintButton />
       </div>
 
+      <div className="print-wrap">
       {/* ─── 1枚目: スコアシート ─── */}
       <div className="sheet">
 
@@ -729,6 +727,7 @@ export default async function ScoreBookSheetPage({
           </div>
         </div>
       </div>
+      </div>{/* /print-wrap */}
     </>
   )
 }
