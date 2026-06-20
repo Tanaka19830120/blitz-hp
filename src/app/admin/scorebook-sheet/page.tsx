@@ -409,6 +409,7 @@ export default async function ScoreBookSheetPage({
               <b>打点</b>=右の欄に数字（例:単打で2点→コード<b style={{ fontFamily: 'monospace' }}>1</b>、打点欄に<b style={{ fontFamily: 'monospace' }}>2</b>）
             </span>
             <span><b>2打席目</b>=下の段に記入</span>
+            <span><b>s</b>=盗塁（例:<b style={{ fontFamily: 'monospace' }}>1s</b>=単打+盗塁）</span>
             <span style={{ borderLeft: '0.5pt solid #ccc', paddingLeft: '2.5mm', fontWeight: 'bold', color: '#555', flexShrink: 0 }}>【守備】</span>
             {[['1','投'],['2','捕'],['3','一'],['4','二'],['5','三'],['6','遊'],['7','左'],['8','中'],['9','右']].map(([n,p]) => (
               <span key={n}><b>{n}</b>={p}</span>
@@ -559,6 +560,7 @@ export default async function ScoreBookSheetPage({
               <div>・<b>上段（1打席目）</b>：コードを左側に書き、打点があれば右の打点欄に数字を書く</div>
               <div>・<b>下段（2打席目）</b>：同じイニングに2打席回ってきた場合のみ使用する</div>
               <div>・<b>打点欄（右半分）</b>：得点が入った打席のみ、点数を数字で記入する</div>
+              <div>・<b>盗塁</b>：コードの後ろに <b style={{ fontFamily: 'monospace' }}>s</b> を付ける（例: <b style={{ fontFamily: 'monospace' }}>1s</b>=単打+盗塁、<b style={{ fontFamily: 'monospace' }}>Bs</b>=四球後に盗塁）</div>
             </div>
 
             {/* ③ 成績欄の集計 */}
@@ -715,6 +717,7 @@ export default async function ScoreBookSheetPage({
                   ['やまだ 7回', '上段: S', '犠打（バント）。打点なし'],
                   ['すずき 1回', '上段: 4 / 打点: 3', '本塁打・打点3（3ランホームラン）'],
                   ['すずき 3回', '上段: D', '死球で出塁。打点なし'],
+                  ['盗塁の書き方', 'コードの後ろに s を付ける', '例: 1s=単打+盗塁、Bs=四球後に盗塁、1s を書いた打席の盗塁を成績欄「盗」に加算'],
                 ].map(([who, written, meaning]) => (
                   <tr key={who}>
                     <td style={{ ...gCell, fontSize: '6pt', fontWeight: 'bold' }}>{who}</td>
