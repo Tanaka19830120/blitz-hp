@@ -155,7 +155,7 @@ export default async function ScoreBookSheetPage({
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          @page { size: A4 landscape; margin: 6mm; }
+          @page { size: A4 landscape; margin: 6mm 6mm 2mm 6mm; }
           body { visibility: hidden !important; background: white !important;
                  margin: 0 !important; padding: 0 !important; }
           .print-wrap { visibility: visible !important; position: absolute !important;
@@ -166,7 +166,7 @@ export default async function ScoreBookSheetPage({
             min-height: unset !important; width: 100% !important;
             display: block !important;
           }
-          .punch-spacer { height: 14mm !important; display: block !important; }
+          .punch-spacer { height: 10mm !important; display: block !important; }
           .no-print { display: none !important; }
         }
         @media screen {
