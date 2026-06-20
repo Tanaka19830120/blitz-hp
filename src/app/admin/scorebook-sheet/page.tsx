@@ -249,13 +249,23 @@ export default async function ScoreBookSheetPage({
           </colgroup>
           <thead>
             <tr>
-              <td style={{ ...cell, height: '5mm', background: '#e4e4e4', fontWeight: 'bold', textAlign: 'center', fontSize: '8pt' }} colSpan={4}>先攻</td>
+              <td style={{ ...cell, height: '5mm', padding: 0 }} colSpan={4}>
+                <div style={{ display: 'flex', alignItems: 'stretch', height: '100%' }}>
+                  <div style={{ padding: '0 1.5mm', display: 'flex', alignItems: 'center', background: '#e4e4e4', fontWeight: 'bold', fontSize: '8pt', whiteSpace: 'nowrap', flexShrink: 0 }}>先攻</div>
+                  <div style={{ flex: 1, background: 'white', borderLeft: '0.8pt solid #aaa' }} />
+                </div>
+              </td>
               {inningNums.map(n => <td key={n} style={{ ...cell, height: '5mm', background: 'white' }} />)}
               <td style={{ ...cell, height: '5mm', background: '#e4e4e4', fontWeight: 'bold', textAlign: 'center', fontSize: '8pt' }}>計</td>
               <td style={{ ...cell, height: '5mm', background: 'white' }} colSpan={STAT_COLS.length - 1} />
             </tr>
             <tr>
-              <td style={{ ...cell, height: '5mm', background: '#e4e4e4', fontWeight: 'bold', textAlign: 'center', fontSize: '8pt' }} colSpan={4}>後攻</td>
+              <td style={{ ...cell, height: '5mm', padding: 0 }} colSpan={4}>
+                <div style={{ display: 'flex', alignItems: 'stretch', height: '100%' }}>
+                  <div style={{ padding: '0 1.5mm', display: 'flex', alignItems: 'center', background: '#e4e4e4', fontWeight: 'bold', fontSize: '8pt', whiteSpace: 'nowrap', flexShrink: 0 }}>後攻</div>
+                  <div style={{ flex: 1, background: 'white', borderLeft: '0.8pt solid #aaa' }} />
+                </div>
+              </td>
               {inningNums.map(n => <td key={n} style={{ ...cell, height: '5mm', background: 'white' }} />)}
               <td style={{ ...cell, height: '5mm', background: '#e4e4e4', fontWeight: 'bold', textAlign: 'center', fontSize: '8pt' }}>計</td>
               <td style={{ ...cell, height: '5mm', background: 'white' }} colSpan={STAT_COLS.length - 1} />
