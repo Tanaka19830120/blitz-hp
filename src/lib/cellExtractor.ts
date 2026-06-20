@@ -75,13 +75,13 @@ const PAPER_H_MM = 210
 //
 // 行構成 (縦): margin6 + header8 + 先攻5 + 後攻5 = 24mm → イニングヘッダー行上端
 //   イニングヘッダー行 ~4mm → tableTop≈28mm
-//   打者行 15mm × 9 = 135mm → tableBot = 163mm
+//   打者行 13mm × 9 = 117mm → tableBot = 145mm
 
 const TMPL = {
   innStart:     87.225 / PAPER_W_MM,  // 0.2937 (守列右端 = イニング列左端)
   innEnd:       248.25  / PAPER_W_MM, // 0.8359 (イニング列右端 = 成績列左端)
   tableTop:     28      / PAPER_H_MM, // 0.1333 (打者行1の上端)
-  rowHeight:    15      / PAPER_H_MM, // 0.0714 (行高 15mm)
+  rowHeight:    13      / PAPER_H_MM, // 0.0619 (行高 13mm)
   templateInns: 7,
   batters:      9,
 } as const
@@ -527,11 +527,11 @@ function refineGridByThickBorder(
   // ── 下端横線 (バッター9行目下端) ──
   // topBorderY が取れていれば、そこから 139mm 下を予測中心にする（より精確）
   // フレーム高 = ヘッダー(4mm) + バッター行×9(135mm) = 139mm
-  const FRAME_H_MM = 4 + TMPL.batters * 15  // 139mm
+  const FRAME_H_MM = 4 + TMPL.batters * 13  // 121mm
   const predBottomYFromTop = topBorderY !== null
     ? topBorderY + FRAME_H_MM * pxPerMmY
     : predBR.y
-  const slopYBottom = Math.max(20, (predH * 0.12) | 0)  // ±12% = 約1行分
+  const slopYBottom = Math.max(20, (predH * 0.15) | 0)  // ±15% = 約1行分強
   const bottomY = scanMaxDarkLine(data, W,
     (predTL.x + predW * 0.1) | 0,
     Math.max(0, (predBottomYFromTop - slopYBottom) | 0),
