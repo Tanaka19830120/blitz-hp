@@ -474,6 +474,13 @@ export default async function ScoreBookSheetPage({
                     <td style={{ ...gCell, fontSize: '6.5pt', color: '#333' }}>{desc}</td>
                   </tr>
                 ))}
+                <tr>
+                  <td style={{ ...gCell, textAlign: 'center', fontWeight: 'bold', background: '#e8f0fe', fontSize: '9pt', fontFamily: 'monospace' }}>s</td>
+                  <td style={{ ...gCell, fontWeight: 'bold', fontSize: '7pt', background: '#e8f0fe' }}>盗塁（サフィックス）</td>
+                  <td style={{ ...gCell, fontSize: '6.5pt', color: '#333', background: '#e8f0fe' }}>
+                    コードの後ろに付ける。例: <b style={{ fontFamily: 'monospace' }}>1s</b>=単打+盗塁、<b style={{ fontFamily: 'monospace' }}>Bs</b>=四球後に盗塁
+                  </td>
+                </tr>
               </tbody>
             </table>
 
@@ -610,7 +617,7 @@ export default async function ScoreBookSheetPage({
                 { order: 2, name: 'やまだ', inn: [
                   { ab1: 'B' },
                   { ab1: 'O' },
-                  { ab1: '1' },
+                  { ab1: '1s' },
                   { ab1: 'O', ab2: '1', rbi2: '1' },
                   { ab1: 'X', rbi1: '1' },
                   { ab1: 'O' },
@@ -628,9 +635,10 @@ export default async function ScoreBookSheetPage({
               ]
               function abBg(code?: string) {
                 if (!code) return 'white'
-                if (code === 'O') return OUT_COLOR
-                if (['1','2','3','4','B','D'].includes(code)) return ON_COLOR
-                if (['S','X'].includes(code)) return SACR_COLOR
+                const c = code[0]
+                if (c === 'O') return OUT_COLOR
+                if (['1','2','3','4','B','D'].includes(c)) return ON_COLOR
+                if (c === 'S' || c === 'X') return SACR_COLOR
                 return 'white'
               }
               const RBI_W = '5.5mm'
@@ -717,7 +725,7 @@ export default async function ScoreBookSheetPage({
                   ['やまだ 7回', '上段: S', '犠打（バント）。打点なし'],
                   ['すずき 1回', '上段: 4 / 打点: 3', '本塁打・打点3（3ランホームラン）'],
                   ['すずき 3回', '上段: D', '死球で出塁。打点なし'],
-                  ['盗塁の書き方', 'コードの後ろに s を付ける', '例: 1s=単打+盗塁、Bs=四球後に盗塁、1s を書いた打席の盗塁を成績欄「盗」に加算'],
+                  ['やまだ 3回', '上段: 1s', '単打+盗塁（コードの後ろに s を付ける）。成績欄「盗」に1を加算'],
                 ].map(([who, written, meaning]) => (
                   <tr key={who}>
                     <td style={{ ...gCell, fontSize: '6pt', fontWeight: 'bold' }}>{who}</td>
