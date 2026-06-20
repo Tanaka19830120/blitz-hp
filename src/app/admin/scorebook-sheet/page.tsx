@@ -476,7 +476,7 @@ export default async function ScoreBookSheetPage({
                 ))}
                 <tr>
                   <td style={{ ...gCell, textAlign: 'center', fontWeight: 'bold', background: '#e8f0fe', fontSize: '9pt', fontFamily: 'monospace' }}>s</td>
-                  <td style={{ ...gCell, fontWeight: 'bold', fontSize: '7pt', background: '#e8f0fe' }}>盗塁（サフィックス）</td>
+                  <td style={{ ...gCell, fontWeight: 'bold', fontSize: '7pt', background: '#e8f0fe' }}>盗塁（添え字）</td>
                   <td style={{ ...gCell, fontSize: '6.5pt', color: '#333', background: '#e8f0fe' }}>
                     コードの後ろに付ける。例: <b style={{ fontFamily: 'monospace' }}>1s</b>=単打+盗塁、<b style={{ fontFamily: 'monospace' }}>Bs</b>=四球後に盗塁
                   </td>
