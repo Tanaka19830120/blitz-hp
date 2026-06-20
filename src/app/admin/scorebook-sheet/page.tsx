@@ -408,10 +408,9 @@ export default async function ScoreBookSheetPage({
               <span key={code}><b style={{ fontFamily: 'monospace' }}>{code}</b>={label}</span>
             ))}
             <span style={{ borderLeft: '0.5pt solid #ccc', paddingLeft: '2.5mm', flexShrink: 0 }}>
-              <b>数字サフィックス</b>=打点（例:<b style={{ fontFamily: 'monospace' }}>12</b>=単打2打点）
+              <b>打点</b>=右の欄に数字（例:単打で2点→コード<b style={{ fontFamily: 'monospace' }}>1</b>、打点欄に<b style={{ fontFamily: 'monospace' }}>2</b>）
             </span>
-            <span><b>s</b>=盗塁（例:<b style={{ fontFamily: 'monospace' }}>1s</b>=単打+盗塁）</span>
-            <span>カンマ=複数打席（例:<b style={{ fontFamily: 'monospace' }}>1,O</b>）</span>
+            <span><b>2打席目</b>=下の段に記入</span>
             <span style={{ borderLeft: '0.5pt solid #ccc', paddingLeft: '2.5mm', fontWeight: 'bold', color: '#555', flexShrink: 0 }}>【守備】</span>
             {[['1','投'],['2','捕'],['3','一'],['4','二'],['5','三'],['6','遊'],['7','左'],['8','中'],['9','右']].map(([n,p]) => (
               <span key={n}><b>{n}</b>={p}</span>
