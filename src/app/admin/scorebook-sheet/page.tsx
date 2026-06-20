@@ -155,41 +155,25 @@ export default async function ScoreBookSheetPage({
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          @page sheet1 { size: A4 landscape; margin: 6mm; }
-          @page sheet2 { size: A4 portrait; margin: 8mm; }
+          @page { size: A4 landscape; margin: 6mm; }
           body { visibility: hidden !important; background: white !important;
                  margin: 0 !important; padding: 0 !important; }
           .print-wrap { visibility: visible !important; position: absolute !important;
                         top: 0 !important; left: 0 !important; width: 100% !important; }
           .print-wrap * { visibility: visible !important; }
           .sheet {
-            page: sheet1;
-            box-shadow: none !important; margin: 0 !important; padding: 0 !important;
-            min-height: unset !important; width: 100% !important;
-            display: block !important;
-          }
-          .sheet-2 {
-            page: sheet2;
             box-shadow: none !important; margin: 0 !important; padding: 0 !important;
             min-height: unset !important; width: 100% !important;
             display: block !important;
           }
           .punch-spacer { height: 14mm !important; display: block !important; }
           .no-print { display: none !important; }
-          .page-break { break-before: page !important; page-break-before: always !important; }
         }
         @media screen {
           body { background: #8a9ab0 !important; }
           .sheet {
             width: 297mm; min-height: 210mm;
             margin: 0 auto; padding: 4mm;
-            background: white;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.35);
-            box-sizing: border-box;
-          }
-          .sheet-2 {
-            width: 210mm; min-height: 297mm;
-            margin: 12px auto 0; padding: 6mm;
             background: white;
             box-shadow: 0 4px 20px rgba(0,0,0,0.35);
             box-sizing: border-box;
@@ -221,6 +205,7 @@ export default async function ScoreBookSheetPage({
         <Link href="/admin/game" style={{ color: '#94a3b8', fontSize: '13px', textDecoration: 'none' }}>← 試合入力</Link>
         <span style={{ color: '#e2e8f0', fontWeight: 'bold', fontSize: '14px' }}>スコア記入シート（7回）</span>
         <PrintButton />
+        <Link href="/admin/scorebook-example" target="_blank" style={{ color: '#60a5fa', fontSize: '13px', textDecoration: 'none', marginLeft: '8px' }}>📖 記入ガイドを印刷（A4縦）→</Link>
       </div>
 
       <div className="print-wrap">
@@ -446,8 +431,8 @@ export default async function ScoreBookSheetPage({
         </div>
       </div>
 
-      {/* ─── 2枚目: スコア記入ガイド ─── */}
-      <div className="sheet-2 page-break">
+      {/* ─── 2枚目: スコア記入ガイド（別ページ /admin/scorebook-example で印刷）─── */}
+      {false && <div className="sheet-2 page-break">
 
         {/* タイトル */}
         <div style={{ display: 'flex', alignItems: 'baseline', gap: '3mm',
@@ -755,7 +740,7 @@ export default async function ScoreBookSheetPage({
             </table>
           </div>
         </div>
-      </div>
+      </div>}
       </div>{/* /print-wrap */}
     </>
   )

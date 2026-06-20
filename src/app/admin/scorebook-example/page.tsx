@@ -47,7 +47,7 @@ export default function ScoreBookExamplePage() {
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          @page { size: A4 landscape; margin: 8mm; }
+          @page { size: A4 portrait; margin: 8mm; }
           body { visibility: hidden !important; background: white !important;
                  margin: 0 !important; padding: 0 !important; }
           .sheet { visibility: visible !important; position: absolute !important;
@@ -59,7 +59,7 @@ export default function ScoreBookExamplePage() {
         @media screen {
           body { background: #8a9ab0 !important; }
           .sheet {
-            width: 297mm; min-height: 210mm;
+            width: 210mm; min-height: 297mm;
             margin: 0 auto; padding: 5mm;
             background: white;
             box-shadow: 0 4px 20px rgba(0,0,0,0.35);
@@ -70,7 +70,7 @@ export default function ScoreBookExamplePage() {
 
       {/* Controls */}
       <div className="no-print" style={{
-        width: '297mm', margin: '0 auto', marginTop: '4rem', padding: '8px 14px',
+        width: '210mm', margin: '0 auto', marginTop: '4rem', padding: '8px 14px',
         display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
         background: '#1e293b', borderBottom: '1px solid #334155',
       }}>
