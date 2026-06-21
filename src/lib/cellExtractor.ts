@@ -32,7 +32,7 @@ interface Markers {
 
 /** セルごとの検出結果 */
 export interface CellSubImages {
-  order:  number        // 打順 1-9
+  order:  number        // 打順 1-12
   inning: number        // イニング 1-N
   image:  string        // dataUrl: セル全体プレビュー（デバッグ表示用）
   // 一巡目 (上段)
@@ -465,17 +465,17 @@ function scanMaxDarkLine(
 
 /**
  * イニンググリッド外枠（太線 3.5pt）の4辺を走査して
- * 打者グリッド（バッター1〜9 × イニング1〜7）の4隅座標を返す。
+ * 打者グリッド（バッター1〜12 × イニング1〜7）の4隅座標を返す。
  *
  * フレーム構造:
  *   ┌─ 上端太線 (= イニングヘッダー行上端, ~24mm from top)
  *   │  イニングヘッダー行 (~4mm, "1 2 3...") ← ここはグリッドに含めない
  *   ├─ データ上端 (= バッター行1の上端, ~28mm) ← gridRef.tl.y
- *   │  バッター行 1〜9 (各 15mm × 9 = 135mm)
- *   └─ 下端太線 (= バッター行9の下端, ~163mm) ← gridRef.bl.y
+ *   │  バッター行 1〜12 (各 11mm × 12 = 132mm)
+ *   └─ 下端太線 (= バッター行12の下端, ~160mm) ← gridRef.bl.y
  *
  * 上端・下端の両方を検出できた場合、フレーム高に対する
- * ヘッダー比率 (4/139 ≈ 2.9%) でデータ上端を精密計算する。
+ * ヘッダー比率 (4/136 ≈ 2.9%) でデータ上端を精密計算する。
  * 片方のみ検出の場合は pxPerMmY ベースのフォールバック。
  */
 function refineGridByThickBorder(
@@ -524,9 +524,9 @@ function refineGridByThickBorder(
     Math.min(H, (predFrameTopY + slopY) | 0),
     'horiz')
 
-  // ── 下端横線 (バッター9行目下端) ──
-  // topBorderY が取れていれば、そこから 139mm 下を予測中心にする（より精確）
-  // フレーム高 = ヘッダー(4mm) + バッター行×9(135mm) = 139mm
+  // ── 下端横線 (バッター12行目下端) ──
+  // topBorderY が取れていれば、そこから 136mm 下を予測中心にする（より精確）
+  // フレーム高 = ヘッダー(4mm) + バッター行×12(132mm) = 136mm
   const FRAME_H_MM = 4 + TMPL.batters * 11  // 136mm
   const predBottomYFromTop = topBorderY !== null
     ? topBorderY + FRAME_H_MM * pxPerMmY
@@ -550,7 +550,7 @@ function refineGridByThickBorder(
   const fb = (bottomY !== null ? bottomY - halfBorderPx : predBR.y)
 
   // ── データ上端 (バッター行1の上端) を計算 ──
-  // フレーム内部 = ヘッダー行(~4mm) + バッター行×9(135mm) ≈ 139mm
+  // フレーム内部 = ヘッダー行(~4mm) + バッター行×12(132mm) ≈ 136mm
   let ft: number
   if (topBorderY !== null && bottomY !== null) {
     // 上下両方検出: 内側エッジ間のフレーム高から比率で計算
@@ -566,8 +566,8 @@ function refineGridByThickBorder(
     const topInsideY = topBorderY + halfBorderPx
     ft = topInsideY + HEADER_H_MM * pxPerMmY
   } else {
-    // 上端未検出: 下端内側から 9行分遡る (フォールバック)
-    ft = fb - TMPL.batters * (15 * pxPerMmY)
+    // 上端未検出: 下端内側から batters行分遡る (フォールバック)
+    ft = fb - TMPL.batters * (11 * pxPerMmY)
   }
 
   console.log('[refineGridByThickBorder]',
