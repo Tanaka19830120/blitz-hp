@@ -5,6 +5,8 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { SubmitButton } from '@/components/SubmitButton'
 
+export const revalidate = 3600
+
 function formatDate(date: Date) {
   return new Date(date).toLocaleDateString('ja-JP', {
     year: 'numeric',
@@ -62,6 +64,7 @@ export default async function ResultsPage({
     include: {
       schedule: true,
       stats: { include: { user: { select: { name: true, number: true } } } },
+      mvpVotes: { include: { nominee: { select: { name: true } } } },
     },
   })
 
@@ -70,7 +73,7 @@ export default async function ResultsPage({
   const draws = games.filter((g) => g.result === 'DRAW').length
 
   return (
-    <div className="pt-16 max-w-7xl mx-auto px-4 py-12">
+    <div className="max-w-7xl mx-auto px-4 py-12">
       <div className="mb-8">
         <h1 className="text-3xl font-black text-[#e2e8f0] mb-2">試合結果</h1>
         <p className="text-[#64748b]">全試合の結果一覧</p>
@@ -151,6 +154,15 @@ export default async function ResultsPage({
               .filter((s) => s.atBats > 0)
               .sort((a, b) => b.hits - a.hits)[0]
 
+            // MVP投票集計
+            const voteMap = new Map<string, { name: string; count: number }>()
+            for (const v of game.mvpVotes) {
+              const cur = voteMap.get(v.nomineeId)
+              if (cur) cur.count++
+              else voteMap.set(v.nomineeId, { name: v.nominee.name ?? '—', count: 1 })
+            }
+            const mvpRanking = [...voteMap.values()].sort((a, b) => b.count - a.count).slice(0, 3)
+
             return (
               <div key={game.id} className="glass-card rounded-2xl p-6 hover:border-[#2563eb]/40 transition-all">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -228,6 +240,20 @@ export default async function ResultsPage({
                 {game.note && (
                   <div className="mt-3 text-sm text-[#94a3b8] border-t border-[#1e3a5f] pt-3">
                     {game.note}
+                  </div>
+                )}
+
+                {mvpRanking.length > 0 && (
+                  <div className="mt-3 border-t border-[#1e3a5f] pt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <span className="text-xs text-[#f59e0b] font-bold shrink-0">🏆 MVP投票</span>
+                    {mvpRanking.map((m, i) => (
+                      <span key={m.name} className="text-xs text-[#94a3b8]">
+                        <span className="text-[#f59e0b] font-bold mr-1">{i + 1}位</span>
+                        <span className="text-[#e2e8f0]">{m.name}</span>
+                        <span className="ml-1 text-[#64748b]">{m.count}票</span>
+                      </span>
+                    ))}
+                    <span className="text-xs text-[#475569] ml-auto">計{game.mvpVotes.length}票</span>
                   </div>
                 )}
               </div>
