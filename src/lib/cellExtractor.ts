@@ -75,15 +75,15 @@ const PAPER_H_MM = 210
 //
 // 行構成 (縦): margin6 + header8 + 先攻5 + 後攻5 = 24mm → イニングヘッダー行上端
 //   イニングヘッダー行 ~4mm → tableTop≈28mm
-//   打者行 13mm × 9 = 117mm → tableBot = 145mm
+//   打者行 11mm × 12 = 132mm → tableBot = 160mm
 
 const TMPL = {
   innStart:     87.225 / PAPER_W_MM,  // 0.2937 (守列右端 = イニング列左端)
   innEnd:       248.25  / PAPER_W_MM, // 0.8359 (イニング列右端 = 成績列左端)
   tableTop:     28      / PAPER_H_MM, // 0.1333 (打者行1の上端)
-  rowHeight:    13      / PAPER_H_MM, // 0.0619 (行高 13mm)
+  rowHeight:    11      / PAPER_H_MM, // 0.0524 (行高 11mm)
   templateInns: 7,
-  batters:      9,
+  batters:      12,
 } as const
 
 // 外角マーカー中心: 6mm margin + 3.5mm (7mm marker の半径)
@@ -527,7 +527,7 @@ function refineGridByThickBorder(
   // ── 下端横線 (バッター9行目下端) ──
   // topBorderY が取れていれば、そこから 139mm 下を予測中心にする（より精確）
   // フレーム高 = ヘッダー(4mm) + バッター行×9(135mm) = 139mm
-  const FRAME_H_MM = 4 + TMPL.batters * 13  // 121mm
+  const FRAME_H_MM = 4 + TMPL.batters * 11  // 136mm
   const predBottomYFromTop = topBorderY !== null
     ? topBorderY + FRAME_H_MM * pxPerMmY
     : predBR.y

@@ -47,7 +47,7 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
   const prevPendingRef = useRef(false)
 
   const [slots, setSlots] = useState<OrderSlot[]>(() => {
-    const len = Math.max(9, initialData.slots.length)
+    const len = Math.max(12, initialData.slots.length)
     return Array.from({ length: len }, (_, i) =>
       initialData.slots[i] ?? { first: empty(), second: empty() }
     )
@@ -220,7 +220,7 @@ export function LineupEditor({ players, scheduleId, initialData, saveAction }: P
 
   function addSlot()       { setSlots(prev => [...prev, { first: empty(), second: empty() }]) }
   function removeSlot(idx: number) {
-    if (slots.length <= 9) return
+    if (slots.length <= 12) return
     setSlots(prev => prev.filter((_, i) => i !== idx))
   }
 

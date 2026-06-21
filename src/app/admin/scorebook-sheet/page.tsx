@@ -2,7 +2,7 @@ import { prisma }       from '@/lib/prisma'
 import Link            from 'next/link'
 import { PrintButton } from '@/components/PrintButton'
 
-const BATTER_COUNT = 9
+const BATTER_COUNT = 12
 const STAT_COLS = ['打', '安', '点', '盗', '四']
 
 function pct(n: number) { return `${n.toFixed(3)}%` }
@@ -181,7 +181,7 @@ export default async function ScoreBookSheetPage({
           .punch-spacer { height: 0; }
         }
         .inn-cell {
-          height: 13mm; min-height: 13mm;
+          height: 11mm; min-height: 11mm;
           overflow: hidden; display: flex; flex-direction: column;
         }
         .inn-ab {
@@ -294,14 +294,14 @@ export default async function ScoreBookSheetPage({
               return (
                 <tr key={bi}>
                   <td style={{ ...cell, textAlign: 'center', fontWeight: 'bold',
-                    background: '#ececec', fontSize: '14pt', height: '13mm', padding: '0.2mm' }}>
+                    background: '#ececec', fontSize: '12pt', height: '11mm', padding: '0.2mm' }}>
                     {bi + 1}
                   </td>
                   <td style={{ ...cell, textAlign: 'center', fontWeight: 'bold',
-                    background: '#f5f5f5', fontSize: '13pt', height: '13mm', padding: '0.2mm' }}>
+                    background: '#f5f5f5', fontSize: '13pt', height: '11mm', padding: '0.2mm' }}>
                     {slotInfo?.jerseyNumber != null ? slotInfo.jerseyNumber : ''}
                   </td>
-                  <td style={{ ...cell, height: '13mm', verticalAlign: 'middle', padding: '0.5mm 1.5mm' }}>
+                  <td style={{ ...cell, height: '11mm', verticalAlign: 'middle', padding: '0.5mm 1.5mm' }}>
                     {slotInfo?.first ? (
                       slotInfo.second ? (
                         <div style={{ fontSize: '8pt', lineHeight: 1.4 }}>
@@ -318,7 +318,7 @@ export default async function ScoreBookSheetPage({
                     ) : null}
                   </td>
                   <td style={{ ...cell, textAlign: 'center', fontWeight: 'bold',
-                    fontSize: '10pt', height: '13mm', padding: '0.2mm' }}>
+                    fontSize: '10pt', height: '11mm', padding: '0.2mm' }}>
                     <span style={{ display: 'block' }}>{slotInfo?.position ?? ''}</span>
                     {slotInfo?.secondPosition && (
                       <span style={{ fontSize: '7pt', fontWeight: 'normal', color: '#000' }}>
@@ -346,7 +346,7 @@ export default async function ScoreBookSheetPage({
                     </td>
                   ))}
                   {STAT_COLS.map(c => (
-                    <td key={c} style={{ ...cell, background: '#f0f0f0', height: '13mm' }} />
+                    <td key={c} style={{ ...cell, background: '#f0f0f0', height: '11mm' }} />
                   ))}
                 </tr>
               )
