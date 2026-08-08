@@ -24,7 +24,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ja" className="h-full">
-      <head>
+      <body className="min-h-full flex flex-col">
         {GA_ID && (
           <>
             <Script
@@ -41,8 +41,6 @@ export default function RootLayout({
             </Script>
           </>
         )}
-      </head>
-      <body className="min-h-full flex flex-col">
         <Providers>
           <Suspense fallback={null}>
             <Toast />
