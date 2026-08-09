@@ -289,17 +289,17 @@ export default async function RankingPage({ searchParams }: { searchParams: Prom
         {pitQualLabel && ` ・ ${pitQualLabel}`}
       </p>
       {pitRows.length === 0 ? <Empty /> : (
-        <div className="glass-card rounded-2xl overflow-hidden">
+        <div className="glass-card rounded-2xl">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[380px]">
+            <table className="w-full text-sm min-w-[560px]">
               <thead><tr className="border-b border-[#1e3a5f] text-xs text-[#64748b] uppercase tracking-wider">
                 <th className="text-center px-3 py-3 w-12">順位</th>
                 <th className="text-left px-3 py-3">選手</th>
                 <th className="text-center px-2 py-3 w-12">試合</th>
                 <th className="text-center px-2 py-3 w-10">勝</th>
                 <th className="text-center px-2 py-3 w-10">負</th>
-                <th className="text-center px-2 py-3 w-10 hidden sm:table-cell">S</th>
-                <th className="text-center px-2 py-3 w-10 hidden sm:table-cell">H</th>
+                <th className="text-center px-2 py-3 w-10">S</th>
+                <th className="text-center px-2 py-3 w-10">H</th>
                 <th className={`text-center px-3 py-3 w-20 ${pitColor}`}>{tab.title}</th>
                 <th className="text-center px-2 py-3 w-16">投球回</th>
               </tr></thead>
@@ -319,8 +319,8 @@ export default async function RankingPage({ searchParams }: { searchParams: Prom
                     <td className="text-center px-2 py-3 text-[#94a3b8]">{p.games}</td>
                     <td className="text-center px-2 py-3">{p.wins > 0 ? <span className="text-[#22c55e] font-bold">{p.wins}</span> : <span className="text-[#475569]">0</span>}</td>
                     <td className="text-center px-2 py-3">{p.losses > 0 ? <span className="text-[#ef4444]">{p.losses}</span> : <span className="text-[#475569]">0</span>}</td>
-                    <td className="text-center px-2 py-3 hidden sm:table-cell">{p.saves > 0 ? <span className="text-[#60a5fa] font-bold">{p.saves}</span> : <span className="text-[#475569]">0</span>}</td>
-                    <td className="text-center px-2 py-3 hidden sm:table-cell">{p.holds > 0 ? <span className="text-[#fbbf24]">{p.holds}</span> : <span className="text-[#475569]">0</span>}</td>
+                    <td className="text-center px-2 py-3">{p.saves > 0 ? <span className="text-[#60a5fa] font-bold">{p.saves}</span> : <span className="text-[#475569]">0</span>}</td>
+                    <td className="text-center px-2 py-3">{p.holds > 0 ? <span className="text-[#fbbf24]">{p.holds}</span> : <span className="text-[#475569]">0</span>}</td>
                     <td className={`text-center px-3 py-3 font-black text-base ${pitColor}`}>
                       {statKey === 'era' ? p.era : p.wins}
                     </td>
