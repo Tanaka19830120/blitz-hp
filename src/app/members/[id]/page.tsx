@@ -310,7 +310,7 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
 
       {/* Career stats */}
       {careerStats.games > 0 && (
-        <div className="glass-card rounded-2xl overflow-hidden mb-6" style={cardStyle}>
+        <div className="glass-card rounded-2xl mb-6" style={cardStyle}>
           <div className="px-5 pt-5">
             <h2 className="text-xs font-bold text-[#64748b] tracking-wider uppercase mb-3">通算成績</h2>
             <p className="text-[10px] text-[#475569] mb-2">← 横スクロールで全成績を確認</p>
@@ -404,7 +404,7 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
 
       {/* Recent game log */}
       {player.gameStats.length > 0 && (
-        <div className="glass-card rounded-2xl overflow-hidden" style={cardStyle}>
+        <div className="glass-card rounded-2xl" style={cardStyle}>
           <div className="px-5 pt-5">
             <h2 className="text-xs font-bold text-[#64748b] tracking-wider uppercase mb-3">直近の試合成績</h2>
             <p className="text-[10px] text-[#475569] mb-2">← 横スクロールで全成績を確認</p>
