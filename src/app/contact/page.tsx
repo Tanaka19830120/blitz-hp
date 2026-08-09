@@ -1,97 +1,58 @@
-'use client'
+import { prisma } from '@/lib/prisma'
+import { unstable_noStore as noStore } from 'next/cache'
+import { ContactForm } from '@/components/ContactForm'
 
-import { useState } from 'react'
-
-export default function ContactPage() {
-  const [sent, setSent] = useState(false)
-  const [sending, setSending] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setError(null)
-    const form = e.currentTarget
-    const data = {
-      name:    (form.elements.namedItem('name') as HTMLInputElement)?.value ?? '',
-      email:   (form.elements.namedItem('email') as HTMLInputElement)?.value ?? '',
-      type:    (form.elements.namedItem('type') as HTMLSelectElement)?.value ?? 'other',
-      message: (form.elements.namedItem('message') as HTMLTextAreaElement)?.value ?? '',
-    }
-    setSending(true)
-    try {
-      const res = await fetch('/api/contact', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        throw new Error(j.error || '送信に失敗しました')
-      }
-      setSent(true)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '送信に失敗しました')
-    } finally {
-      setSending(false)
-    }
-  }
+export default async function ContactPage() {
+  noStore()
+  const [emailSetting, daySetting, areaSetting, targetSetting, openSetting] = await Promise.all([
+    prisma.setting.findUnique({ where: { key: 'contactEmail' } }),
+    prisma.setting.findUnique({ where: { key: 'activityDay' } }),
+    prisma.setting.findUnique({ where: { key: 'activityArea' } }),
+    prisma.setting.findUnique({ where: { key: 'activityTarget' } }),
+    prisma.setting.findUnique({ where: { key: 'contactOpen' } }),
+  ])
+  const contactEmail   = emailSetting?.value  || ''
+  const activityDay    = daySetting?.value    || '土・日曜日（月2回程度）'
+  const activityArea   = areaSetting?.value   || '兵庫県 加古川・加古郡・明石エリア'
+  const activityTarget = targetSetting?.value || 'ソフトボール経験者・未経験者問わず歓迎'
+  const contactOpen    = openSetting?.value !== '0'
 
   return (
-    <div className="pt-16 max-w-2xl mx-auto px-4 py-12">
+    <div className="max-w-2xl mx-auto px-4 py-12">
       <div className="mb-8">
         <h1 className="text-3xl font-black text-[#e2e8f0] mb-2">お問い合わせ</h1>
         <p className="text-[#64748b]">体験参加・入団希望など、お気軽にご連絡ください。</p>
       </div>
 
-      {sent ? (
-        <div className="glass-card rounded-2xl p-10 text-center">
-          <div className="text-4xl mb-4">✅</div>
-          <h2 className="text-xl font-bold text-[#e2e8f0] mb-2">送信完了</h2>
-          <p className="text-[#64748b]">お問い合わせいただきありがとうございます。<br />担当者より折り返しご連絡いたします。</p>
-          <button
-            onClick={() => setSent(false)}
-            className="mt-6 text-sm text-[#60a5fa] hover:underline"
-          >
-            別のお問い合わせをする
-          </button>
+      {/* メールアドレス表示 */}
+      {contactEmail && (
+        <div className="glass-card rounded-2xl p-5 mb-6 flex items-center gap-4">
+          <span className="text-2xl">✉️</span>
+          <div>
+            <div className="text-xs text-[#64748b] mb-0.5">メールでのお問い合わせ</div>
+            <a
+              href={`mailto:${contactEmail}`}
+              className="text-[#60a5fa] font-bold hover:underline text-lg"
+            >
+              {contactEmail}
+            </a>
+          </div>
         </div>
+      )}
+
+      {/* フォーム or 受付停止メッセージ */}
+      {contactOpen ? (
+        <ContactForm />
       ) : (
-        <div className="glass-card rounded-2xl p-6">
-          <form onSubmit={handleSubmit} className="grid gap-5">
-            <div>
-              <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">お名前 *</label>
-              <input name="name" type="text" required placeholder="山田 太郎" className="w-full" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">メールアドレス *</label>
-              <input name="email" type="email" required placeholder="yamada@example.com" className="w-full" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">お問い合わせ種別</label>
-              <select name="type" className="w-full">
-                <option value="trial">体験参加について</option>
-                <option value="join">入団希望</option>
-                <option value="practice">練習試合の申し込み</option>
-                <option value="other">その他</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-[#94a3b8] mb-1.5">お問い合わせ内容 *</label>
-              <textarea
-                name="message"
-                required
-                rows={5}
-                placeholder="お気軽にご記入ください"
-                className="w-full bg-[#0d1b2a] border border-[#1e3a5f] rounded-lg px-4 py-3 text-[#e2e8f0] placeholder:text-[#334155] focus:outline-none focus:border-[#2563eb] resize-none"
-              />
-            </div>
-            {error && <p className="text-sm text-[#ef4444]">⚠ {error}</p>}
-            <div>
-              <button type="submit" disabled={sending} className="btn-primary w-full py-3 text-base disabled:opacity-60">
-                {sending ? '送信中…' : '送信する'}
-              </button>
-            </div>
-          </form>
+        <div className="glass-card rounded-2xl p-10 text-center border border-[#ef4444]/30">
+          <div className="text-5xl mb-4">🚫</div>
+          <h2 className="text-xl font-bold text-[#e2e8f0] mb-2">現在、新規お問い合わせを停止しています</h2>
+          <p className="text-[#64748b] text-sm">
+            受付再開までしばらくお待ちください。<br />
+            {contactEmail && (
+              <>緊急の場合は <a href={`mailto:${contactEmail}`} className="text-[#60a5fa] hover:underline">{contactEmail}</a> までご連絡ください。</>
+            )}
+          </p>
         </div>
       )}
 
@@ -99,9 +60,9 @@ export default function ContactPage() {
         <h2 className="text-xs font-bold tracking-[0.3em] text-[#60a5fa] uppercase mb-4">活動情報</h2>
         <dl className="space-y-2 text-sm">
           {[
-            { label: '活動日', value: '土・日曜日（月2回程度）' },
-            { label: '活動地域', value: '兵庫県 加古川・加古郡・明石エリア' },
-            { label: '対象', value: 'ソフトボール経験者・未経験者問わず歓迎' },
+            { label: '活動日',   value: activityDay },
+            { label: '活動地域', value: activityArea },
+            { label: '対象',     value: activityTarget },
           ].map(({ label, value }) => (
             <div key={label} className="flex gap-3">
               <dt className="text-[#64748b] w-20 shrink-0">{label}</dt>

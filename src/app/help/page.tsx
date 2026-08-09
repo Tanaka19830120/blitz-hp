@@ -27,7 +27,7 @@ export default async function HelpPage() {
   const session = await auth()
   if (!session?.user) {
     return (
-      <div className="pt-16 max-w-3xl mx-auto px-4 py-20 text-center">
+      <div className="max-w-3xl mx-auto px-4 py-20 text-center">
         <h1 className="text-2xl font-black text-[#e2e8f0] mb-3">📖 使い方ガイド</h1>
         <p className="text-[#64748b] mb-6">使い方ガイドはメンバー専用です。ログインしてください。</p>
         <Link href="/login" className="btn-primary">ログイン</Link>
@@ -37,7 +37,7 @@ export default async function HelpPage() {
   const isAdmin = (session.user as { role?: string }).role === 'ADMIN'
 
   return (
-    <div className="pt-16 max-w-3xl mx-auto px-4 py-12">
+    <div className="max-w-3xl mx-auto px-4 py-12">
       <div className="mb-8">
         <h1 className="text-3xl font-black text-[#e2e8f0] mb-2">📖 使い方ガイド（メンバー向け）</h1>
         <p className="text-[#64748b]">BLITZ チームサイトの基本的な使い方をまとめています。</p>

@@ -129,7 +129,7 @@ export default async function AdminMastersPage() {
   const guests         = allUsers.filter(u => u.isGuest)
 
   return (
-    <div className="pt-16 max-w-3xl mx-auto px-4 py-12 space-y-10">
+    <div className="max-w-3xl mx-auto px-4 py-12 space-y-10">
       <div className="flex items-center gap-4 mb-8">
         <Link href="/admin" className="text-[#64748b] hover:text-[#94a3b8]">← 管理</Link>
         <h1 className="text-2xl font-black text-[#e2e8f0]">マスタ管理</h1>

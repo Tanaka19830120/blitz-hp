@@ -30,6 +30,17 @@ async function createMember(formData: FormData) {
     redirect(`/admin/members?toast=${encodeURIComponent('助っ人を追加しました')}`)
   }
 
+  // 背番号重複チェック（現メンバーのみ対象）
+  if (number != null) {
+    const conflict = await prisma.user.findFirst({
+      where: { number, email: { endsWith: '@b' }, isGuest: false },
+      select: { name: true },
+    })
+    if (conflict) {
+      redirect(`/admin/members?numberConflict=${encodeURIComponent(`#${number} はすでに「${conflict.name}」が使用中です。別の背番号を指定してください。`)}`)
+    }
+  }
+
   // 現メンバー: ログインID = 背番号（なければ名前）、初期PW = ログインID×2
   const loginId = number != null ? String(number) : name.toLowerCase().replace(/\s+/g, '')
   const email   = `${loginId}@b`
@@ -69,12 +80,26 @@ async function updateMember(formData: FormData) {
   const name      = String(formData.get('name'))
 
   // 背番号が変わった場合はログインID（email）とパスワードも更新
-  const existing = await prisma.user.findUnique({ where: { id }, select: { number: true } })
+  // ただし退団中（@retired）のメンバーはメールサフィックスを維持する
+  const existing = await prisma.user.findUnique({ where: { id }, select: { number: true, email: true } })
   const numberChanged = number !== existing?.number
+  const isRetired = existing?.email.endsWith('@retired') ?? false
 
-  const loginId  = number != null ? String(number) : name.toLowerCase().replace(/\s+/g, '')
-  const newEmail = `${loginId}@b`
-  const newPwHash = numberChanged ? await bcrypt.hash(`${loginId}${loginId}`, 10) : undefined
+  // 背番号変更時の重複チェック（現メンバーのみ・自分自身は除く）
+  if (numberChanged && number != null && !isRetired) {
+    const conflict = await prisma.user.findFirst({
+      where: { number, email: { endsWith: '@b' }, isGuest: false, NOT: { id } },
+      select: { name: true },
+    })
+    if (conflict) {
+      redirect(`/admin/members?edit=${id}&numberConflict=${encodeURIComponent(`#${number} はすでに「${conflict.name}」が使用中です。別の背番号を指定してください。`)}`)
+    }
+  }
+
+  const loginId   = number != null ? String(number) : name.toLowerCase().replace(/\s+/g, '')
+  const suffix    = isRetired ? '@retired' : '@b'
+  const newEmail  = `${loginId}${suffix}`
+  const newPwHash = numberChanged && !isRetired ? await bcrypt.hash(`${loginId}${loginId}`, 10) : undefined
 
   await prisma.user.update({
     where: { id },
@@ -84,7 +109,7 @@ async function updateMember(formData: FormData) {
       number,
       position: String(formData.get('position') || '') || null,
       photoUrl: String(formData.get('photoUrl') || '') || null,
-      ...(numberChanged ? { email: newEmail, password: newPwHash } : {}),
+      ...(numberChanged ? { email: newEmail, ...(newPwHash ? { password: newPwHash } : {}) } : {}),
     },
   })
   revalidatePath('/members')
@@ -105,6 +130,101 @@ async function resetPassword(formData: FormData) {
   redirect(`/admin/members?toast=${encodeURIComponent('パスワードをリセットしました')}`)
 }
 
+async function promoteMember(formData: FormData) {
+  'use server'
+  const id        = String(formData.get('id'))
+  const numberRaw = formData.get('number')
+  const number    = numberRaw && String(numberRaw).trim() !== '' ? parseInt(String(numberRaw)) : null
+
+  const user = await prisma.user.findUnique({ where: { id }, select: { email: true, isGuest: true } })
+  if (!user || !user.isGuest) return
+
+  // 背番号重複チェック
+  if (number != null) {
+    const conflict = await prisma.user.findFirst({
+      where: { number, email: { endsWith: '@b' }, isGuest: false },
+      select: { name: true },
+    })
+    if (conflict) {
+      redirect(`/admin/members?promote=${id}&numberConflict=${encodeURIComponent(`#${number} はすでに「${conflict.name}」が使用中です。別の背番号を指定してください。`)}`)
+    }
+  }
+
+  const loginId = number != null ? String(number) : id.slice(-6)
+  const email   = `${loginId}@b`
+  const password = await bcrypt.hash(`${loginId}${loginId}`, 10)
+
+  await prisma.user.update({
+    where: { id },
+    data: { isGuest: false, email, password, number },
+  })
+  revalidatePath('/members')
+  revalidatePath('/stats')
+  revalidatePath('/admin/members')
+  revalidatePath('/admin/lineup')
+  revalidatePath('/admin/game')
+  redirect(`/admin/members?toast=${encodeURIComponent('メンバーに昇格しました（成績データはそのまま引き継がれます）')}`)
+}
+
+async function retireMember(formData: FormData) {
+  'use server'
+  const id = String(formData.get('id'))
+  const user = await prisma.user.findUnique({ where: { id }, select: { email: true } })
+  if (!user || !user.email.endsWith('@b')) return
+  const loginId = user.email.replace(/@b$/, '')
+  await prisma.user.update({
+    where: { id },
+    data: { email: `${loginId}@retired` },
+  })
+  revalidatePath('/members')
+  revalidatePath('/stats')
+  revalidatePath('/admin/members')
+  redirect(`/admin/members?toast=${encodeURIComponent('退団処理しました（元メンバーに移動）')}`)
+}
+
+async function rejoinMember(formData: FormData) {
+  'use server'
+  const id        = String(formData.get('id'))
+  const numberRaw = formData.get('number')
+  const newNumber = numberRaw && String(numberRaw).trim() !== '' ? parseInt(String(numberRaw)) : null
+
+  const user = await prisma.user.findUnique({ where: { id }, select: { email: true, number: true } })
+  if (!user || !user.email.endsWith('@retired')) return
+
+  const number  = newNumber ?? user.number
+
+  // 背番号重複チェック（現メンバーと被っていないか）
+  if (number != null) {
+    const conflict = await prisma.user.findFirst({
+      where: { number, email: { endsWith: '@b' }, isGuest: false },
+      select: { name: true },
+    })
+    if (conflict) {
+      redirect(`/admin/members?rejoin=${id}&toast=${encodeURIComponent(`⚠ 背番号 #${number} は ${conflict.name} が使用中です。別の番号を入力してください。`)}`)
+    }
+  }
+
+  const loginId = number != null ? String(number) : user.email.replace(/@retired$/, '')
+  const newHash = number !== user.number
+    ? await bcrypt.hash(`${loginId}${loginId}`, 10)
+    : undefined
+
+  await prisma.user.update({
+    where: { id },
+    data: {
+      email:    `${loginId}@b`,
+      number,
+      ...(newHash ? { password: newHash } : {}),
+    },
+  })
+  revalidatePath('/members')
+  revalidatePath('/stats')
+  revalidatePath('/admin/members')
+  revalidatePath('/admin/lineup')
+  revalidatePath('/admin/game')
+  redirect(`/admin/members?toast=${encodeURIComponent('復帰処理しました（現メンバーに移動）')}`)
+}
+
 async function deleteMember(formData: FormData) {
   'use server'
   const id = String(formData.get('id'))
@@ -117,10 +237,13 @@ async function deleteMember(formData: FormData) {
 export default async function AdminMembersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ edit?: string }>
+  searchParams: Promise<{ edit?: string; rejoin?: string; promote?: string; numberConflict?: string }>
 }) {
   const sp = await searchParams
-  const editId = sp.edit
+  const editId         = sp.edit
+  const rejoinId       = sp.rejoin
+  const promoteId      = sp.promote
+  const numberConflict = sp.numberConflict
 
   const allUsers = await prisma.user.findMany({
     orderBy: [{ role: 'asc' }, { number: 'asc' }, { name: 'asc' }],
@@ -133,14 +256,35 @@ export default async function AdminMembersPage({
     m.isGuest ? 2 : (m.email.endsWith('@b') ? 0 : 1)
   const members = [...allUsers].sort((a, b) => tier(a) - tier(b))  // 同tier内は元の並び維持
 
-  const editMember = editId ? members.find((m) => m.id === editId) : null
+  const editMember       = editId    ? members.find((m) => m.id === editId)    : null
+  const rejoinMemberData = rejoinId  ? members.find((m) => m.id === rejoinId)  : null
+  const promoteMemberData = promoteId ? members.find((m) => m.id === promoteId) : null
+
+  // 現メンバーの背番号セット（重複チェック用）
+  const currentNumbers = new Set(
+    members.filter(m => !m.isGuest && m.email.endsWith('@b')).map(m => m.number).filter(n => n != null)
+  )
+  const rejoinConflict = rejoinMemberData?.number != null && currentNumbers.has(rejoinMemberData.number)
+    ? members.find(m => m.email.endsWith('@b') && m.number === rejoinMemberData.number)
+    : null
+  const promoteConflict = promoteMemberData?.number != null && currentNumbers.has(promoteMemberData.number)
+    ? members.find(m => m.email.endsWith('@b') && m.number === promoteMemberData.number)
+    : null
 
   return (
-    <div className="pt-16 max-w-4xl mx-auto px-4 py-12">
+    <div className="max-w-4xl mx-auto px-4 py-12">
       <div className="flex items-center gap-4 mb-8">
         <Link href="/admin" className="text-[#64748b] hover:text-[#94a3b8]">← 管理</Link>
         <h1 className="text-2xl font-black text-[#e2e8f0]">メンバー管理</h1>
       </div>
+
+      {/* 背番号重複警告 */}
+      {numberConflict && (
+        <div className="mb-6 p-4 rounded-xl bg-[#f59e0b]/10 border border-[#f59e0b]/40 text-sm text-[#fbbf24] flex items-start gap-2">
+          <span className="shrink-0 text-base">⚠</span>
+          <span>{numberConflict}</span>
+        </div>
+      )}
 
       {/* Edit form */}
       {editMember ? (
@@ -182,7 +326,7 @@ export default async function AdminMembersPage({
             </div>
             <div>
               <label className="block text-xs text-[#64748b] mb-1.5">背番号 <span className="text-[#475569]">（変更でログインIDも更新）</span></label>
-              <input type="number" name="number" defaultValue={editMember.number ?? ''} placeholder="例: 7" min="0" max="99" />
+              <input type="number" name="number" defaultValue={editMember.number ?? ''} placeholder="例: 7" min="0" max="999" />
             </div>
             <div>
               <label className="block text-xs text-[#64748b] mb-1.5">ポジション</label>
@@ -220,7 +364,7 @@ export default async function AdminMembersPage({
             </div>
             <div>
               <label className="block text-xs text-[#64748b] mb-1.5">背番号 <span className="text-[#475569]">（助っ人は任意）</span></label>
-              <input type="number" name="number" placeholder="例: 7" min="0" max="99" />
+              <input type="number" name="number" placeholder="例: 7" min="0" max="999" />
             </div>
             <div>
               <label className="block text-xs text-[#64748b] mb-1.5">ポジション</label>
@@ -244,12 +388,100 @@ export default async function AdminMembersPage({
         </div>
       )}
 
+      {/* 復帰確認パネル */}
+      {rejoinMemberData && rejoinMemberData.email.endsWith('@retired') && (
+        <div className={`glass-card rounded-2xl p-6 mb-8 border ${rejoinConflict ? 'border-[#f59e0b]/50' : 'border-[#22c55e]/30'}`}>
+          <h2 className="text-sm font-bold text-[#22c55e] mb-1">🔄 {rejoinMemberData.name} を現メンバーに復帰</h2>
+
+          {rejoinConflict && (
+            <div className="mb-4 p-3 rounded-lg bg-[#f59e0b]/10 border border-[#f59e0b]/30 text-sm text-[#fbbf24]">
+              ⚠ 背番号 #{rejoinMemberData.number} は現在 <span className="font-bold">{rejoinConflict.name}</span> が使用中です。
+              別の背番号を指定して復帰してください。
+            </div>
+          )}
+
+          <form action={rejoinMember} className="flex flex-wrap items-end gap-3 mt-3">
+            <input type="hidden" name="id" value={rejoinMemberData.id} />
+            <div>
+              <label className="block text-xs text-[#64748b] mb-1.5">
+                背番号{rejoinConflict ? <span className="text-[#f59e0b] ml-1">（変更必須）</span> : <span className="text-[#475569] ml-1">（変更する場合のみ入力）</span>}
+              </label>
+              <input
+                type="number"
+                name="number"
+                min="0" max="999"
+                defaultValue={rejoinMemberData.number ?? ''}
+                className={rejoinConflict ? 'border-[#f59e0b]/50' : ''}
+                placeholder="背番号"
+                style={{ width: '100px' }}
+              />
+            </div>
+            <div className="flex gap-2">
+              <SubmitButton pendingLabel="処理中…" className="btn-primary py-2 px-4 text-sm">
+                復帰する
+              </SubmitButton>
+              <Link href="/admin/members" className="py-2 px-4 text-sm rounded-lg border border-[#1e3a5f] text-[#64748b] hover:text-[#94a3b8] transition-colors">
+                キャンセル
+              </Link>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* 助っ人昇格確認パネル */}
+      {promoteMemberData && promoteMemberData.isGuest && (
+        <div className={`glass-card rounded-2xl p-6 mb-8 border ${promoteConflict ? 'border-[#f59e0b]/50' : 'border-[#22c55e]/30'}`}>
+          <h2 className="text-sm font-bold text-[#22c55e] mb-1">➕ {promoteMemberData.name} をメンバーに追加</h2>
+          <p className="text-xs text-[#64748b] mb-3">成績データはそのまま引き継がれます。ログインIDと初期パスワードは背番号×2になります。</p>
+
+          {promoteConflict && (
+            <div className="mb-4 p-3 rounded-lg bg-[#f59e0b]/10 border border-[#f59e0b]/30 text-sm text-[#fbbf24]">
+              ⚠ 背番号 #{promoteMemberData.number} は現在 <span className="font-bold">{promoteConflict.name}</span> が使用中です。
+              別の背番号を指定してください。
+            </div>
+          )}
+
+          <form action={promoteMember} className="flex flex-wrap items-end gap-3 mt-3">
+            <input type="hidden" name="id" value={promoteMemberData.id} />
+            <div>
+              <label className="block text-xs text-[#64748b] mb-1.5">
+                背番号{promoteConflict ? <span className="text-[#f59e0b] ml-1">（変更必須）</span> : ''}
+              </label>
+              <input
+                type="number" name="number" min="0" max="999"
+                defaultValue={promoteMemberData.number ?? ''}
+                className={promoteConflict ? 'border-[#f59e0b]/50' : ''}
+                placeholder="例: 7"
+                style={{ width: '100px' }}
+              />
+            </div>
+            <div className="flex gap-2">
+              <SubmitButton pendingLabel="処理中…" className="btn-primary py-2 px-4 text-sm">
+                メンバーに追加する
+              </SubmitButton>
+              <Link href="/admin/members" className="py-2 px-4 text-sm rounded-lg border border-[#1e3a5f] text-[#64748b] hover:text-[#94a3b8] transition-colors">
+                キャンセル
+              </Link>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* Member list */}
-      <h2 className="text-xs font-bold tracking-[0.3em] text-[#60a5fa] uppercase mb-4">
-        登録メンバー ({members.length}名)
-      </h2>
-      <div className="flex flex-col gap-2">
-        {members.map((m) => (
+      {[
+        { label: '現メンバー', color: 'text-[#60a5fa]', filter: (m: typeof members[number]) => !m.isGuest && m.email.endsWith('@b') },
+        { label: '元メンバー', color: 'text-[#8b5cf6]', filter: (m: typeof members[number]) => !m.isGuest && !m.email.endsWith('@b') },
+        { label: '助っ人',     color: 'text-[#94a3b8]', filter: (m: typeof members[number]) => m.isGuest },
+      ].map(({ label, color, filter }) => {
+        const group = members.filter(filter)
+        if (group.length === 0) return null
+        return (
+          <div key={label} className="mb-6">
+            <h2 className={`text-xs font-bold tracking-[0.3em] ${color} uppercase mb-3`}>
+              {label} ({group.length}名)
+            </h2>
+            <div className="flex flex-col gap-2">
+              {group.map((m) => (
           <div
             key={m.id}
             className={`glass-card rounded-xl px-4 py-3 flex items-center justify-between gap-3 ${
@@ -269,17 +501,17 @@ export default async function AdminMembersPage({
                 )}
               </div>
               <div className="min-w-0">
-                <div className="font-medium text-[#e2e8f0] flex items-center gap-2">
+                <div className="font-medium text-[#e2e8f0] flex items-center gap-2 flex-wrap">
+                  {m.number != null && (
+                    <span className="text-xs font-bold text-[#60a5fa] bg-[#1e3a5f] px-1.5 py-0.5 rounded shrink-0">#{m.number}</span>
+                  )}
                   {m.name}
                   {m.role === 'ADMIN' && <span className="text-xs text-[#fbbf24]">管理者</span>}
                   {m.isGuest && <span className="text-[10px] text-[#a78bfa] border border-[#a78bfa]/40 rounded px-1">助っ人</span>}
                   {!m.isGuest && !m.email.endsWith('@b') && <span className="text-[10px] text-[#64748b] border border-[#334155] rounded px-1">元メンバー</span>}
                 </div>
-                <div className="text-xs text-[#64748b] truncate">{m.email}</div>
+                <div className="text-xs text-[#475569] truncate">{m.position || m.email}</div>
               </div>
-              {m.position && (
-                <span className="text-xs text-[#94a3b8] hidden sm:block">{m.position}</span>
-              )}
             </div>
             <div className="flex items-center gap-3 shrink-0">
               {/* 管理者トグル */}
@@ -304,6 +536,36 @@ export default async function AdminMembersPage({
               >
                 編集
               </Link>
+              {/* 退団 / 復帰 */}
+              {m.email.endsWith('@b') && (
+                <form action={retireMember}>
+                  <input type="hidden" name="id" value={m.id} />
+                  <SubmitButton
+                    pendingLabel="処理中…"
+                    confirm={`${m.name} を退団処理しますか？\nログインできなくなりますが、成績データは元メンバーとして保持されます。`}
+                    className="text-xs text-[#f59e0b]/60 hover:text-[#f59e0b] transition-colors"
+                  >
+                    退団
+                  </SubmitButton>
+                </form>
+              )}
+              {m.isGuest && (
+                <Link
+                  href={`/admin/members?promote=${m.id}`}
+                  title="メンバーに追加します（成績データはそのまま引き継がれます）"
+                  className="text-xs text-[#22c55e]/60 hover:text-[#22c55e] transition-colors"
+                >
+                  メンバーに追加
+                </Link>
+              )}
+              {m.email.endsWith('@retired') && (
+                <Link
+                  href={`/admin/members?rejoin=${m.id}`}
+                  className="text-xs text-[#22c55e]/60 hover:text-[#22c55e] transition-colors"
+                >
+                  復帰
+                </Link>
+              )}
               <form action={deleteMember}>
                 <input type="hidden" name="id" value={m.id} />
                 <SubmitButton
@@ -316,8 +578,11 @@ export default async function AdminMembersPage({
               </form>
             </div>
           </div>
-        ))}
-      </div>
+              ))}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

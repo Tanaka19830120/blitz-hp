@@ -9,7 +9,7 @@ const BASE = 'https://teams.one/teams/blitz/game'
 const DELAY_MS = 800
 
 const client = createClient({
-  url: process.env.DATABASE_URL ?? 'file:./dev.db',
+  url: process.env.DATABASE_DIRECT_URL ?? process.env.DATABASE_URL ?? 'file:./dev.db',
   authToken: process.env.DATABASE_AUTH_TOKEN ?? undefined,
 })
 

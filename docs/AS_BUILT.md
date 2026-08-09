@@ -1,8 +1,15 @@
 # BLITZ ソフトボールチーム HP — 完成図書（As-Built Documentation）
 
-> 仮運用開始時点の全仕様をまとめた技術ドキュメント。
 > 対象リポジトリ: `Tanaka19830120/blitz-hp`（GitHub）/ 本番: https://blitz-hp.vercel.app
-> 最終更新: 2026-06 仮運用開始時点
+
+---
+
+## リビジョン履歴
+
+| Rev | 日付 | 概要 |
+|---|---|---|
+| 1.0 | 2026-06 | 仮運用開始時点のスナップショット |
+| 1.1 | 2026-06 | メンバー管理強化・統計ランキング強化・新機能追加（MVP投票/写真いいね/ライトボックス等） |
 
 ---
 
@@ -22,16 +29,17 @@
 12. ライブラリ（`src/lib`）
 13. スコアブック記法 と OCR パイプライン
 14. 成績集計ロジック
-15. 助っ人（ゲスト）の扱い
+15. メンバー区分の扱い
 16. LINE 連携
 17. 写真ストレージ（Vercel Blob）
 18. データ取込（teams.one スクレイピング）
 19. DB マイグレーション運用
 20. 共通 UX（トースト / ローディング / 確認ダイアログ）
-21. 既知の制約・注意点
-22. 運用手順（よくある操作）
-23. 開発・ビルド・デプロイ手順
-24. 今後の TODO / 改善候補
+21. パフォーマンス設計
+22. 既知の制約・注意点
+23. 運用手順（よくある操作）
+24. 開発・ビルド・デプロイ手順
+25. 今後の TODO / 改善候補
 
 ---
 
@@ -42,13 +50,15 @@ BLITZ（兵庫県加古川・加古郡・明石を拠点とする混合ソフト
 **背景:** 既存の `teams.one`（外部サービス）の広告・機能制限を回避するため自作。過去の試合データは teams.one からスクレイピングして移行済み。
 
 **主な機能:**
-- 日程・出欠管理（メンバーがログインして出欠登録）
-- 試合結果の入力（スコアシートを写真で OCR 取込 + 手修正）と公開
-- 個人成績（打撃・投手）の自動集計・ランキング
+- 日程・出欠管理（メンバーがログインして出欠登録・確認ダイアログ付き）
+- 試合結果の入力（スコアシート OCR + 手修正）と公開、先攻/後攻設定保存
+- 個人成績（打撃・投手）の自動集計・ランキング・推移グラフ
 - スタメン（打順・守備・交代）作成と LINE 配信
-- LINE への出欠リマインド・出欠表・試合結果の通知
-- 写真アルバム（試合・イベント、メンバー専用）
-- 管理者用の各種マスタ・設定
+- LINE への出欠リマインド・出欠表・試合結果の通知（スコア行にリンク埋め込み）
+- 写真アルバム（ライトボックス表示・❤️いいね機能）
+- MVP投票（試合後2週間）
+- メンバー管理（退団/復帰/助っ人昇格、背番号重複チェック）
+- 歴代成績・元メンバー閲覧
 
 ---
 
@@ -73,7 +83,7 @@ BLITZ（兵庫県加古川・加古郡・明石を拠点とする混合ソフト
 ### Prisma 構成の注意
 
 - 生成クライアント出力先: `src/generated/prisma`（`import { PrismaClient } from '@/generated/prisma/client'`）
-- PrismaClient は必ず `PrismaLibSql` アダプタ経由で初期化（`src/lib/prisma.ts`）。
+- PrismaClient は `PrismaLibSql` アダプタ経由で初期化（`src/lib/prisma.ts`）。
 - 本番（NODE_ENV=production）ではグローバルキャッシュせず、モジュールスコープのシングルトンを利用。
 
 ---
@@ -105,6 +115,7 @@ Vercel（Next.js App Router, SSR/Server Actions）
 | 変数 | 用途 |
 |---|---|
 | `DATABASE_URL` | Turso libsql の URL（ローカルは `file:./dev.db`） |
+| `DATABASE_DIRECT_URL` | スクリプト・migrate.ts 用の直接接続 URL（DATABASE_URL と同値でも可） |
 | `DATABASE_AUTH_TOKEN` | Turso 認証トークン |
 | `AUTH_SECRET` | NextAuth セッション署名鍵 |
 | `AUTH_URL` / `NEXTAUTH_URL` | 認証コールバック URL |
@@ -114,7 +125,8 @@ Vercel（Next.js App Router, SSR/Server Actions）
 | `LINE_CHANNEL_ACCESS_TOKEN` | LINE 送信トークン |
 | `LINE_GROUP_ID` | 送信先グループ ID（未設定時は DB の `detectedLineGroupId` 設定を使用） |
 | `CRON_SECRET` | cron エンドポイントの保護 |
-| `RESCAN` | （スクリプト用）`scrape-details.ts` で取込済み試合も再処理するフラグ |
+
+> **スクリプト実行時**: `DATABASE_DIRECT_URL` が優先される。Accelerate などプロキシ URL を `DATABASE_URL` に設定した場合でも、スクリプトは libsql に直接接続できる。
 
 ---
 
@@ -122,12 +134,19 @@ Vercel（Next.js App Router, SSR/Server Actions）
 
 - **方式**: NextAuth v5、Credentials プロバイダ、**JWT セッション**（DB セッション不使用＝ミドルウェアが高速）。
 - **ログイン ID = 背番号**、**初期パスワード = 背番号×2**（例: 背番号 28 → ID `28` / PW `2828`）。内部的に email を `"{背番号}@b"` として保存。
-- メンバー作成・更新時、背番号が変わると email とパスワードも自動再設定（`src/app/admin/members/page.tsx`）。
 - **ロール**: `ADMIN` / `PLAYER`。
 - **アクセス制御**（`src/proxy.ts` = Next.js 16 のミドルウェア）:
   - `/admin/*` は `ADMIN` のみ。非管理者は `/login` にリダイレクト。
-  - その他のページは全員アクセス可（ただし出欠登録・写真などは未ログインだと操作不可 or ログイン案内）。
-- セッションには `user.id` と `user.role` を格納（`src/auth.ts` の callbacks）。
+  - その他のページは全員アクセス可（出欠登録・写真などは未ログインだと操作不可 or ログイン案内）。
+
+### メンバーの email 命名規則
+
+| email のサフィックス | 区分 | ログイン可 |
+|---|---|---|
+| `@b` | 現メンバー | ✅ |
+| `@retired` | 退団済み（退団ボタンで変更） | ❌ |
+| `@former` / その他 | インポート元の過去メンバー | ❌ |
+| `@guest` | 助っ人 | ❌ |
 
 ---
 
@@ -146,65 +165,55 @@ Vercel（Next.js App Router, SSR/Server Actions）
 |---|---|---|
 | id | String @id cuid | |
 | name | String | |
-| email | String @unique | `"{背番号}@b"` |
+| email | String @unique | `"{背番号}@b"` / `@retired` / `@former` / `@guest` |
 | password | String | bcrypt ハッシュ |
 | role | Role = PLAYER | |
-| number | Int? | 背番号 |
+| number | Int? | 背番号（0〜999、一意制約なし） |
 | position | String? | |
 | photoUrl | String? | Vercel Blob URL |
-| **isGuest** | Boolean = false | 助っ人。メンバー一覧・個人成績ランキングから除外 |
+| isGuest | Boolean = false | 助っ人。メンバー一覧・個人成績ランキングから除外 |
 | createdAt / updatedAt | DateTime | |
-| リレーション | attendances / gameStats / pitchingStats / lineups / photos | |
+| リレーション | attendances / gameStats / pitchingStats / lineups / photos / **mvpVotesCast / mvpVotesGot / photoLikes** | |
 
 ### Schedule（日程）
-| カラム | 型 | 備考 |
-|---|---|---|
-| id | String @id | |
-| date | DateTime | |
-| opponent | String | EVENT 時はイベント内容（例「BBQ」）。空可 |
-| location | String | 場所名（Google マップ検索 URL を名前から自動生成） |
-| type | GameType = REGULAR | |
-| meetTime / startTime | String? | |
-| note | String? | メモ・備考（改行可、LINE にも記載） |
-| dayGroupId | String? | 同日複数試合のグループ識別子（@@index） |
-| リレーション | attendances / game(1:1) / lineups | |
+（変更なし。省略）
 
 ### Game（試合結果）
 | カラム | 型 | 備考 |
 |---|---|---|
-| id | String @id | |
-| ourScore / opponentScore | Int | |
-| result | GameResult | |
-| note | String? | |
-| inningScores | String? | JSON `{"blitz":[..],"opponent":[..]}` |
-| scorebook | String? | JSON `ScoreBookData`（イニング別・打者別） |
-| scorePhoto | String? | スコアシート写真の Blob URL |
-| teamsOneId | String? @unique | 移行元 teams.one のゲーム ID |
-| scheduleId | String @unique | Schedule と 1:1。**onDelete: Cascade** |
-| リレーション | stats(GameStat[]) / pitchingStats(PitchingStat[]) | |
+| … | … | 変更なし |
+| inningScores | String? | JSON `{"blitz":[..],"opponent":[..],"blitzFirst":bool}` **blitzFirst は先攻/後攻フラグ** |
+| scorebook | String? | JSON `ScoreBookData`（**oppFirst フラグを含む**） |
+| リレーション | stats / pitchingStats / **mvpVotes** | |
 
-### GameStat（打者成績・試合単位）
-打数・安打・二/三塁打・本・打点・得点・盗塁・三振・四球・死球・犠打・犠飛・打席・守備位置・打順。`userId+gameId` で一意。user/game ともに **onDelete: Cascade**。
+### GameStat / PitchingStat / Lineup / Setting（変更なし）
 
-### PitchingStat（投手成績・試合単位）
-勝敗（`勝/負/S/H`）・投球回（文字列 `"5"` / `"5.1"` / `"5回1/3"`）・投球数・失点・自責点・被安打・奪三振・与四球。`userId+gameId` で一意。
-
-### Lineup（スタメン・後方互換テーブル）
-打順・守備・DH フラグ。`userId+scheduleId` で一意。スタメンの主データは `Setting` の `lineupData_{scheduleId}`（JSON）で、Lineup テーブルは同期用。
-
-### Setting（KV 設定）
-`key`(PK) / `value`。用途例:
+### Setting（KV 設定）—追加分
+- `qualIpPerGame`: 規定投球回（1試合あたり、既定 1.0）
 - `qualPaPerGame`: 規定打席（1試合あたり、既定 2.0）
-- `detectedLineGroupId`: LINE グループ ID 自動検出値
-- `opponentMaster` / `locationMaster`: 対戦相手・球場マスタ（JSON 文字列配列）
-- `gameTypeLabel_{KEY}`: 試合種別ラベルのカスタム表示名
-- `lineupData_{scheduleId}`: スタメン JSON（打順・前後半守備・交代）
-- `lineupNote_{scheduleId}`: スタメンのメモ
-- プロフィール各種（about / info / grounds / retiredNumbers 等）
+- その他は変更なし
 
-### PhotoAlbum / Photo（写真アルバム）
-- `PhotoAlbum`: id / title / date / createdAt（@@index date）
-- `Photo`: id / albumId / url(Blob) / uploadedById(User?) / createdAt。album は onDelete: Cascade、uploadedBy は onDelete: SetNull。
+### PhotoAlbum / Photo（変更）
+- `Photo` に **`likes PhotoLike[]`** リレーション追加
+
+### PhotoLike（新規）
+| カラム | 型 | 備考 |
+|---|---|---|
+| id | String @id | |
+| photoId | String | Photo onDelete: Cascade |
+| userId | String | User onDelete: Cascade |
+| createdAt | DateTime | |
+| @@unique([photoId, userId]) | | 1人1いいね |
+
+### MvpVote（新規）
+| カラム | 型 | 備考 |
+|---|---|---|
+| id | String @id | |
+| gameId | String | Game onDelete: Cascade |
+| voterId | String | 投票者 User |
+| nomineeId | String | 候補者 User |
+| createdAt | DateTime | |
+| @@unique([gameId, voterId]) | | 1試合1票 |
 
 ---
 
@@ -214,24 +223,24 @@ Vercel（Next.js App Router, SSR/Server Actions）
 blitz-hp/
 ├─ prisma/
 │  ├─ schema.prisma           … データモデル
-│  ├─ migrate.ts              … ビルド時の冪等マイグレーション（libsql 直接 SQL）
+│  ├─ migrate.ts              … ビルド時の冪等マイグレーション
 │  ├─ seed.ts                 … 初期データ投入
-│  ├─ scrape-details.ts       … teams.one 全試合スクレイピング取込
-│  └─ （その他データ補修スクリプト）
-├─ scripts/                   … 運用・調査用スクリプト（audit-stats, reset-admin 等）
-├─ public/
-│  ├─ hero-softball.png       … ホーム背景画像
-│  └─ blitz-logo.jpg
+│  └─ prisma.config.ts        … Prisma 設定（datasource URL）
+├─ scripts/                   … 運用・調査・データ修正スクリプト
+│  ├─ fix-historical-stats.ts … 名前ベース成績再割り当て（背番号重複修正）
+│  ├─ fix-duplicate-stats.ts  … 重複背番号による誤挿入修正
+│  ├─ audit-stats.ts          … teams.one との成績照合
+│  └─ （その他: reset-admin, check-*, list-members 等）
+├─ docs/
+│  └─ AS_BUILT.md             … 本ドキュメント
 ├─ src/
-│  ├─ auth.ts                 … NextAuth 設定
+│  ├─ auth.ts
 │  ├─ proxy.ts                … ミドルウェア（/admin ガード）
-│  ├─ generated/prisma/       … Prisma 生成クライアント
-│  ├─ app/                    … App Router ページ・API・レイアウト
-│  ├─ components/             … クライアント/サーバーコンポーネント
-│  └─ lib/                    … 共通ロジック
-├─ vercel.json                … cron 設定
-├─ next.config.ts             … 画像 remotePatterns 等
-└─ AGENTS.md / CLAUDE.md      … 開発上の注意
+│  ├─ generated/prisma/
+│  ├─ app/
+│  ├─ components/
+│  └─ lib/
+└─ vercel.json
 ```
 
 ---
@@ -242,87 +251,84 @@ blitz-hp/
 
 | ルート | 内容 |
 |---|---|
-| `/` | ホーム。ヒーロー（背景画像 `hero-softball.png` + ロゴ/CTA）、Next Game（次の予定。EVENT は「🎉 内容」表示）、Recent Results。 |
-| `/schedule` | 日程・出欠。ログインメンバーは各試合に出欠（出席/欠席/MAYBE）を登録。同日グループは全試合一括更新。場所は Google マップへのリンク。EVENT は「🎉 内容」表示。備考は改行反映。 |
-| `/results` | 試合結果一覧。年タブで絞り込み（`?year=`）。勝敗集計（W/L/D・勝率）。各カードに最高打者・詳細リンク。**管理者には各カードに「削除」ボタン**（試合結果のみ削除、日程は残る）。ローディングスケルトンあり。 |
-| `/results/[id]` | 試合結果詳細（`id`=scheduleId）。ヘッダースコア、イニングスコア、**打者成績（イニング別の結果を日本語表示＝安/二安/本/打点N 等 + 右側に打数/安打/打率/二/三/本/打点/盗塁/四球/死球/犠打/犠飛 + 打席/守備）**、投手成績。打者・投手名はクリックで選手ページへ（助っ人はリンクなし＋「助っ人」バッジ）。スコアブック JSON があればイニング別表示、無ければ GameStat フォールバック表。ローディングスケルトンあり。 |
-| `/stats` | 個人成績。**デフォルトは最新年**（`?year=all` で通算、`?year=2026` で年指定）。打率/打点/安打/本塁打のランキングカード（見出しクリックで全順位ページへ）。打撃成績表（規定打席到達/未到達で分割）、投手成績表。助っ人は除外。 |
-| `/stats/ranking` | ランキング全順位（`?stat=avg|rbi|hits|homeRuns&year=`）。規定打席系（打率）は到達者のみ、その他は出場者全員。同値は同順位。 |
-| `/members` | メンバー一覧（助っ人除外）。 |
-| `/members/[id]` | 選手個人ページ。 |
-| `/album` | 写真アルバム一覧（**メンバー専用**=要ログイン）。日付降順、各アルバムは「日付＋タイトル」。アルバム作成フォーム。管理者はアルバム削除可。 |
-| `/album/[id]` | アルバム詳細。写真グリッド + 複数アップロード（クライアント圧縮）。削除は管理者または投稿者本人。 |
-| `/profile` | チームプロフィール（公開）。 |
+| `/` | ホーム。ヒーロー、Next Game、Recent Results。 |
+| `/schedule` | 日程・出欠。出欠ボタンは **確認ダイアログ付きクライアントコンポーネント**（`AttendanceButtons`）。登録中スピナー表示。同日グループは全試合一括更新。 |
+| `/results` | 試合結果一覧。年タブで絞り込み。勝敗集計（W/L/D・**勝率 = 勝÷(勝+負)、引き分けを分母から除外**）。 |
+| `/results/[id]` | 試合結果詳細。イニングスコア（先攻/後攻順序を `blitzFirst` フラグで制御）、打者・投手成績。**MVP投票UI**（試合後2週間）。`dynamic = 'force-dynamic'`。 |
+| `/stats` | 個人成績。**「現メンバー/歴代全員」切り替え**（`?mode=all`）、年度タブ。打撃成績（規定打席到達/未到達分割）、投手成績（**規定投球回到達/未到達分割**）。**出場試合数ランキング**（出席率付き）。打率/打点/安打/HR/防御率/勝利数のランキングカード（投手系含む）。 |
+| `/stats/ranking` | ランキング全順位。**タブ: 打者（打率/打点/安打/本塁打）・投手（防御率/勝利数）**。防御率は規定投球回到達者のみ昇順。各ランキングの下部に**推移グラフ**（X軸=実日付、同日複数試合は最終値を使用、規定到達者は右端まで破線延長）。 |
+| `/members` | メンバー一覧。**「現メンバー/元メンバー(OB)」タブ**。背番号バッジ表示。 |
+| `/members/[id]` | 選手個人ページ。**直近連続出場記録**、**今シーズン打率推移グラフ**（SVGスパークライン）。全試合成績一覧（年付き日付）。 |
+| `/album` | 写真アルバム一覧（メンバー専用）。 |
+| `/album/[id]` | アルバム詳細。**ライトボックス表示**（クリックで拡大、← → ナビ/キーボード操作/Escで閉じる）。**❤️いいねトグル**（1人1いいね、再押しで取り消し）。削除は管理者または投稿者本人。 |
+| `/profile` | チームプロフィール（公開）。勝率は引き分け除外方式。 |
 | `/contact` | お問い合わせ。 |
-| `/login` | ログイン（背番号 + パスワード）。 |
+| `/login` | ログイン。 |
 
 ### 管理ページ（`/admin/*`、ADMIN のみ）
 
 | ルート | 内容 |
 |---|---|
-| `/admin` | ダッシュボード。件数サマリ、直近予定、各予定への LINE 送信（出欠リマインド/出欠表）。 |
-| `/admin/schedule` | 日程の追加（クライアントフォーム、保存中/保存しましたトースト、EVENT 時は対戦相手任意でイベント内容入力）・編集・削除（確認ダイアログ、結果ありは警告）・同日試合追加・グループ解除。プルダウン未選択は送信ブロック。 |
-| `/admin/game` | **試合結果入力**（後述の中核機能）。試合選択→ScoreBookEditor。スタメン/既存成績からプリセット。取り込んだスコアシート写真を最下部に表示（管理者のみ）。 |
-| `/admin/lineup` | スタメン作成（打順・前後半守備・交代・FP）。保存で `lineupData_{scheduleId}` と Lineup テーブルに保存。LINE 配信ボタン。 |
-| `/admin/members` | メンバー追加/編集/削除、権限トグル、PW リセット。各操作にトースト。 |
-| `/admin/masters` | 対戦相手・球場マスタ、試合種別ラベル、過去データからの取込。 |
-| `/admin/settings` | 規定打席係数など。 |
+| `/admin` | ダッシュボード。LINE 送信ボタン（プレビュー確認付き）。 |
+| `/admin/schedule` | 日程管理。 |
+| `/admin/game` | 試合結果入力。**先攻/後攻設定が保存・復元される**（`ScoreBookData.oppFirst`）。LINE 送信時はスコア行の直下に結果ページ URL を添付（クリッカブルリンク）。 |
+| `/admin/lineup` | スタメン作成。 |
+| `/admin/members` | **メンバー管理**（大幅強化）。3セクション（現メンバー/元メンバー/助っ人）分割表示。背番号バッジ表示。**退団ボタン**（`@b`→`@retired`、ログイン不可、成績保持）。**復帰フロー**（`?rejoin=id`、背番号重複チェック、変更可能）。**「メンバーに追加」**（助っ人→現メンバー昇格、成績引継ぎ、背番号重複チェック）。背番号は0〜999、新規/編集時に重複チェック（現メンバーのみ対象）。 |
+| `/admin/masters` | マスタ管理。 |
+| `/admin/settings` | 規定打席係数・**規定投球回係数**（`qualIpPerGame`、既定 1.0）を設定。 |
 | `/admin/profile` | チームプロフィール編集。 |
-| `/admin/scorebook-sheet` | 現場用のスコア記入シート印刷（QR コード付き）。 |
-| `/admin/line-setup` | LINE 連携セットアップ。 |
+| `/admin/scorebook-sheet` | スコア記入シート印刷。 |
+| `/admin/line-setup` | LINE 連携設定。 |
 
 ---
 
-## 9. API ルート（`src/app/api`）
+## 9. API ルート（変更なし）
 
 | ルート | 用途 |
 |---|---|
-| `auth/[...nextauth]` | NextAuth ハンドラ。 |
-| `ocr-scorebook` | スコアシート OCR。クライアントが切り出したセル画像 + 圧縮画像を受け取り、Claude Vision で各打席を判定して `batterCells` を返す。`ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL`（既定 `claude-opus-4-5`）。 |
-| `upload-image` | メンバー写真アップロード（ADMIN のみ）。Blob `members/`。 |
-| `upload-score-photo` | スコアシート写真アップロード（要ログイン）。Blob `score-photos/{scheduleId}/`。 |
-| `upload-photo` | アルバム写真アップロード（要ログイン）。Blob `albums/{albumId}/`。Photo 行も作成。 |
-| `cron/line-reminder` | 毎日の出欠リマインド自動送信（`CRON_SECRET` で保護）。 |
-| `line/webhook` | LINE Webhook（グループ ID 自動検出など）。 |
-| `line/test` | LINE 送信テスト。 |
+| `auth/[...nextauth]` | NextAuth ハンドラ |
+| `ocr-scorebook` | スコアシート OCR（Claude Vision） |
+| `upload-image` | メンバー写真アップロード |
+| `upload-score-photo` | スコアシート写真アップロード |
+| `upload-photo` | アルバム写真アップロード |
+| `cron/line-reminder` | 毎日の出欠リマインド自動送信 |
+| `line/webhook` | LINE Webhook（グループ ID 自動検出） |
+| `line/test` | LINE 送信テスト |
 
 ---
 
-## 10. サーバーアクション（主要）
+## 10. サーバーアクション（主要・Rev1.1 追記分）
 
 | ファイル | アクション | 概要 |
 |---|---|---|
-| `admin/game/page.tsx` | `saveGame` | スコア + スコアブック JSON + 個人/投手成績を一括保存（成績は ScoreBookData から自動計算）。LINE 送信オプション。`inningScores` も保存。関連ページを revalidate。 |
-| | `saveScorePhoto` | スコアシート写真 URL を Game.scorePhoto に保存。 |
-| `admin/schedule/page.tsx` | `createSchedule` | 日程追加（クライアントから useActionState、結果トースト）。EVENT は対戦相手任意。 |
-| | `updateSchedule` / `deleteSchedule` / `addGameToDay` / `unlinkFromGroup` | 編集/削除/同日追加/グループ解除。成功後 `?toast=` 付き redirect。 |
-| `admin/members/page.tsx` | `createMember` / `updateMember` / `deleteMember` / `toggleRole` / `resetPassword` | メンバー管理。トースト付き。 |
-| `admin/masters/page.tsx` | `addOpponent`/`removeOpponent`/`addLocation`/`removeLocation`/`updateGameTypeLabels`/`seedMasters` | マスタ管理。 |
-| `admin/lineup/page.tsx` | `saveLineup` / `sendLineLineupGroup` | スタメン保存 / LINE 配信。 |
-| `schedule/page.tsx` | `updateAttendance` | 出欠登録（同日グループ一括）。トースト。 |
-| `results/page.tsx` | `deleteGame` | 試合結果のみ削除（ADMIN）。日程は残す。 |
-| `album/page.tsx` | `createAlbum` / `deleteAlbum` | アルバム作成（要ログイン）/ 削除（ADMIN）。 |
-| `album/[id]/page.tsx` | `deletePhoto` | 写真削除（ADMIN または投稿者本人）。 |
-
-> トーストの仕組み: 多くのアクションは成功後 `redirect(`...?toast=${encodeURIComponent('○○しました')}`)` し、ルート常設の `Toast` コンポーネント（`src/components/Toast.tsx`）が `?toast=` を検出して表示・URL から除去する。
+| `results/[id]/page.tsx` | `castMvpVote` | MVP投票（1人1票、試合後2週間）。`@@unique([gameId, voterId])` で重複防止。 |
+| `album/[id]/page.tsx` | `togglePhotoLike` | 写真いいねトグル（あれば削除、なければ作成）。 |
+| `album/[id]/page.tsx` | `deletePhoto` | シグネチャ変更: `(photoId, albumId)` を引数で受取（FormData 方式→引数方式）。 |
+| `admin/members/page.tsx` | `retireMember` | 退団処理（`@b`→`@retired`）。 |
+| | `rejoinMember` | 復帰処理。背番号を変更可能。重複時は redirect でエラー返し。 |
+| | `promoteMember` | 助っ人→現メンバー昇格。isGuest:false、email:`@b`、password 設定。成績データ引継ぎ。 |
+| | `createMember` | 背番号重複チェック追加。背番号 max: 999。 |
+| | `updateMember` | 背番号変更時の重複チェック。退団中は `@retired` を維持（`@b` で上書きしない）。 |
+| `schedule/page.tsx` | `updateAttendance` | シグネチャ変更: `(scheduleId, status)` 引数方式（FormData 方式→引数方式）。 |
 
 ---
 
-## 11. 主要コンポーネント（`src/components`）
+## 11. 主要コンポーネント
 
 | コンポーネント | 役割 |
 |---|---|
-| `ScoreBookEditor` | **試合結果入力の中核**（クライアント）。打順×イニングのマークシート式スコアブック、OCR 取込、打者/投手成績、イニングスコア、LINE プレビュー保存。`key={scheduleId}` で試合切替時に再マウント。 |
-| `LineupEditor` | スタメン編集（打順・守備・交代・FP）。保存中/保存しました表示内蔵。 |
-| `Toast` | URL `?toast=` を検出して「✅ ○○しました」を全画面共通表示（ルート常設）。 |
-| `SubmitButton` | `useFormStatus` で送信中ラベル表示 + 任意で確認ダイアログ。 |
-| `SaveFormButton` | 保存系ボタン（保存中.../✓保存しました 内蔵）。settings/profile で使用。 |
-| `ConfirmSubmitButton` | 確認ダイアログ付き submit（現在は SubmitButton に統合方向）。 |
-| `ScheduleCreateForm` | 日程追加クライアントフォーム（useActionState + トースト + EVENT 切替）。 |
-| `LineConfirmModal` / `LineAdminButton` / `LineSendButton` | LINE 送信プレビュー・確認（ポータルで body 直下に描画、最前面）。 |
-| `AlbumUploader` | アルバム写真の複数アップロード + クライアント圧縮（長辺1600px/JPEG0.8）。 |
-| `PhotoUploader` / `ScorePhotoUploader` | 各種写真アップロード UI。 |
-| `Navbar` / `Providers` / `MemberAvatar` / `PrintButton` / `LineupProgressPanel` | 共通 UI。 |
+| `ScoreBookEditor` | 試合結果入力の中核。**`oppFirst` ステートを `ScoreBookData` に保存**（先攻/後攻設定の永続化）。 |
+| `AttendanceButtons` | **出欠登録ボタン**（クライアント）。確認ダイアログ + 登録中スピナー付き。 |
+| `MvpVote` | **MVP投票UI**（クライアント）。投票前: 候補一覧、投票後: 得票バー+パーセント表示。 |
+| `PhotoGrid` | **アルバムグリッド + ライトボックス**（クライアント統合コンポーネント）。グリッド・拡大表示・前後ナビ・いいね・削除を1コンポーネントに統合。 |
+| `PhotoLikeButton` | **写真いいねトグルボタン**（クライアント）。再押しで取り消し。 |
+| `AdminEditLink` | 結果詳細の「編集」リンク（クライアント側で useSession によるロール判定。ISR 対応のため Server Action で auth() を呼ばない）。 |
+| `Toast` | URL `?toast=` 検出して共通トースト表示。 |
+| `SubmitButton` | 送信中ラベル + 確認ダイアログ対応。 |
+| `SaveFormButton` | 保存系ボタン（保存中.../✓保存しました）。 |
+| `AlbumUploader` | アルバム写真アップロード + クライアント圧縮。 |
+| `LineConfirmModal` / `LineAdminButton` | LINE 送信プレビュー・確認。 |
+| `Navbar` / `Providers` / `MemberAvatar` / `PrintButton` / `LineupProgressPanel` / `ScheduleCreateForm` | 共通 UI。 |
 
 ---
 
@@ -331,141 +337,177 @@ blitz-hp/
 | ファイル | 役割 |
 |---|---|
 | `prisma.ts` | PrismaClient（libsql アダプタ）シングルトン。 |
-| `scorebook.ts` | スコアブック記法の型・パース・集計・日本語変換（後述）。 |
-| `cellExtractor.ts` | スコアシート画像から四隅マーカー検出・透視補正・各セル切り出し（クライアント側）。OCR の前処理。 |
-| `statsQueries.ts` | 打撃成績集計（`getBattingStats`）、年度一覧、試合数、規定打席。助っ人除外。 |
-| `line.ts` | LINE 送信ユーティリティ・各種メッセージ生成（出欠リマインド/出欠表/スタメン/試合結果）。場所に Google マップ URL を付与。 |
-| `maps.ts` | 場所名 → Google マップ検索 URL 生成。 |
-| `settings.ts` | KV 設定・マスタ・プロフィールのヘルパー。試合種別ラベル。 |
-| `markSheetConfig.ts` | マークシートのレイアウト定義。 |
+| `scorebook.ts` | スコアブック記法の型・パース・集計・日本語変換。**`ScoreBookData` に `oppFirst?: boolean` フィールド追加**（先攻/後攻設定）。 |
+| `cellExtractor.ts` | スコアシート画像前処理（クライアント側）。 |
+| `statsQueries.ts` | **大幅追加**: `getBattingStats(year, includeAlumni)` / `getPitchingStats(year, includeAlumni)`（歴代モード対応）/ `getQualIpPerGame()` 規定投球回係数 / **`getPlayerTrends(playerIds, year, stat)`** 打率・安打・打点・HR の時系列データ（同日複数試合は最終値に集約） / `TrendStat` 型。 |
+| `line.ts` | LINE 送信・メッセージ生成。**試合結果メッセージ: スコア行直下に結果ページ URL（自動リンク化）**。 |
+| `maps.ts` | 場所名 → Google マップ URL 生成。 |
+| `settings.ts` | KV 設定・マスタ・プロフィールのヘルパー。 |
+| `markSheetConfig.ts` | マークシートレイアウト定義。 |
 
 ---
 
-## 13. スコアブック記法 と OCR パイプライン
-
-### スコアブック記法（`src/lib/scorebook.ts`）
+## 13. スコアブック記法 と OCR パイプライン（変更なし）
 
 1打席を 1 コードで表す: `<結果>[<打点>][s]`
-- 結果: `O`=アウト、`1`=単打、`2`=二塁打、`3`=三塁打、`4`=本塁打、`B`=四球、`D`=死球、`S`=犠打、`X`=犠飛、`K/G/F`=旧コード（後方互換）
-- 末尾数字 = 打点（例 `12` = 単打2打点）、本塁打 `4` は数字なしでも1打点
-- 末尾 `s` = 盗塁
-- 1イニングに複数打席はカンマ区切り（例 `1,O`）
+- 結果: `O`=アウト、`1`=単打、`2`=二塁打、`3`=三塁打、`4`=本塁打、`B`=四球、`D`=死球、`S`=犠打、`X`=犠飛
+- 末尾数字 = 打点、末尾 `s` = 盗塁
 
-主要関数:
-- `parseCode(raw)`: 1打席 → `BatterStats` 差分
-- `calcBatterStats(cells)`: 打者の全セルを集計
-- `codeToJa(raw)` / `cellToJaParts(raw)`: コード → 日本語（安 / 二安 / 本 / 打点N / ・盗 / 凡 等）。試合結果詳細の表示に使用。
-- `cellColor(code)`: コード別の文字色クラス。
-
-### OCR パイプライン
-
-1. **クライアント**（`cellExtractor.ts` + `ScoreBookEditor`）: 撮影/選択画像から四隅マーカーを検出 → 透視補正 → 打順×イニングの各セルを小画像に切り出し。メモリ対策で `MAX_DIM≈1500px`、JPEG 低品質、単一 canvas の使い回し。EXIF 回転補正あり。
-2. **送信**: 圧縮した元画像（約 50〜150KB）+ セル小画像群を `POST /api/ocr-scorebook`（ペイロードは Vercel 4.5MB 制限内）。
-3. **サーバー**（`ocr-scorebook/route.ts`）: Claude Vision に「打席コード欄」「打点欄」を画像で問い合わせ、ルールベースで `{ab1,rbi1,ab2,rbi2}` → コード文字列に組み立て、`batterCells` を返す。
-4. **反映**: `ScoreBookEditor` が `batterCells` で打者セルを上書き。BLITZ のイニングスコアを読み取った打点で初期反映（**以降は手修正可能**＝エラー得点等に対応）。元画像は `/api/upload-score-photo` で Blob に保存し `Game.scorePhoto` に記録。
-5. **注意**: モバイル写真は画質・サイズの制約で完璧な精度は出ない（PC は良好）。空セルが稀に「O」誤読される等の限界を許容。
+OCR パイプライン（変更なし、詳細は Rev1.0 参照）。
 
 ---
 
 ## 14. 成績集計ロジック
 
-- **試合単位**は GameStat / PitchingStat に保存（`saveGame` が ScoreBookData から自動計算して再生成）。
-- **通算/年度**は `statsQueries.getBattingStats(year)` と `/stats` 内 `getPitchingStats(year)` が User をまたいで集計。**助っ人（isGuest）は除外**。
-- 指標: 打率 `H/AB`、出塁率 `(H+BB+HBP)/(AB+BB+HBP+SF)`、長打率、防御率 `自責 × 21 / アウト数`（7イニング想定）。
-- 規定打席 = `floor(試合数 × qualPaPerGame)`（既定係数 2.0）。
-- BLITZ の試合得点はスコアブックの打点合計を初期値とし、イニングスコア欄で手修正可能（合計が得点）。相手得点はイニング手入力の合計。
+- **試合単位**: GameStat / PitchingStat に保存（`saveGame` が ScoreBookData から自動計算）。
+- **通算/年度**: `getBattingStats(year, includeAlumni)` / `getPitchingStats(year, includeAlumni)` で集計。助っ人は基本除外。`includeAlumni=true` で元メンバーも含む（歴代モード）。
+- **指標**: 打率 `H/AB`、出塁率 `(H+BB+HBP)/(AB+BB+HBP+SF)`、長打率、防御率 `自責 × 21 / アウト数`（7イニング想定）。
+- **勝率**: `勝 ÷（勝 + 負）` **引き分けを分母から除外**（`/profile` ページ）。
+- **規定打席** = `floor(試合数 × qualPaPerGame)`（既定 2.0、`/admin/settings` で変更可）。
+- **規定投球回** = `floor(試合数 × qualIpPerGame)`（既定 1.0、`/admin/settings` で変更可）。
+- **推移グラフ**: 同日複数試合は最終試合後の累積値のみプロット（垂直線を防ぐため）。規定到達者は最終出場日以降も右端まで破線延長。
+- **先攻/後攻**: `Game.inningScores` の `blitzFirst` フラグ（true=BLITZ が先攻）でイニングスコアの表示順を制御。`ScoreBookData.oppFirst` として保存・復元。
 
 ---
 
-## 15. 助っ人（ゲスト）の扱い
+## 15. メンバー区分の扱い（Rev1.1 強化）
 
-- `User.isGuest = true` が助っ人。
-- **判定基準（重要）**: teams.one 取込時、**当時の背番号があれば「元メンバー（脱退者）」= isGuest:false**、**背番号が無ければ助っ人 = isGuest:true**。
-  - 背番号を持つ過去在籍者を助っ人扱いしないため。
-  - 既に助っ人として作られたユーザーも、番号付きで再出現すれば元メンバーへ昇格（`scrape-details.ts` の `promoteIfNumbered`）。
-- 助っ人は **メンバー一覧（/members）・個人成績ランキング（/stats）から除外**。試合結果詳細では表示し「助っ人」バッジ付き・プロフィールリンクなし。
-- 結果入力画面の選手選択ドロップダウンでは助っ人を**末尾**に配置。
-- 既知のエイリアス（別表記の同一人物）は `scrape-details.ts` の `MEMBER_ALIASES`（例: りゅうせい→RYUSEI）で統合。
+### 区分の定義
+
+| 区分 | email | isGuest | ログイン | 成績ランキング | メンバー一覧 |
+|---|---|---|---|---|---|
+| 現メンバー | `@b` | false | ✅ | 現メンバーモード | 現メンバータブ |
+| 退団済み | `@retired` | false | ❌ | 歴代モードのみ | 元メンバータブ |
+| インポート済み過去メンバー | `@former` 等 | false | ❌ | 歴代モードのみ | 元メンバータブ |
+| 助っ人 | `@guest` | true | ❌ | 除外 | 助っ人タブ（管理画面のみ） |
+
+### 退団フロー
+
+1. 管理画面「退団」ボタン → email `@b` → `@retired` に変更
+2. ログイン不可、成績データは保持
+3. 元メンバータブ・歴代モードで閲覧可能
+4. 「復帰」ボタンで `?rejoin=id` → 背番号重複チェック → `@b` に戻す
+
+### 助っ人昇格フロー
+
+1. 管理画面「メンバーに追加」ボタン → `?promote=id`
+2. 背番号・重複チェック画面 → 「メンバーに追加する」
+3. `isGuest=false`、email `@b`、password 設定（背番号×2）
+4. 過去の GameStat がそのまま引き継がれる（userId は変わらない）
+
+### 背番号重複チェック
+
+- 新規登録・編集・復帰・助っ人昇格の全操作でチェック
+- 対象: 現メンバー（`@b` email）のみ。元メンバーとの重複は許容
+- 重複時: 警告メッセージ表示、処理中断（強制上書き機能なし）
 
 ---
 
 ## 16. LINE 連携（`src/lib/line.ts`）
 
-- グループへのプッシュ送信。送信先は `LINE_GROUP_ID`、未設定時は DB `detectedLineGroupId`（Webhook で自動検出）。
-- メッセージ生成: `buildReminder`（出欠リマインド。場所の🗺地図 URL・備考📝 を含む）、`buildAttendanceSummary`（出欠集計）、`buildLineup`/`buildLineupFromJson`（スタメン）、`buildGameResult`（試合結果。打者・投手成績含む）。
-- 送信は管理画面のボタン（`LineAdminButton`）からプレビュー確認後に実行。送信成功時トースト。
+- グループへのプッシュ送信。
+- **試合結果メッセージ**: スコア行（`BLITZ X ー Y 相手`）の直下に結果ページ URL を出力 → LINE がリンクとして認識・タップ可能。
+- メッセージ生成: `buildReminder`（出欠リマインド）、`buildAttendanceSummary`（出欠集計）、`buildLineup`/`buildLineupFromJson`（スタメン）、`buildGameResult`（試合結果）。
 - cron（`/api/cron/line-reminder`）で定期リマインド。
 
 ---
 
 ## 17. 写真ストレージ（Vercel Blob）
 
-- すべて `access: 'public'`（公開 URL。URL はランダムで推測困難）。
-- 保存パス: `members/`（メンバー写真）/ `score-photos/{scheduleId}/`（スコアシート）/ `albums/{albumId}/`（アルバム）。
-- 表示は `next/image` 経由で自動圧縮・リサイズ配信（`next.config.ts` の `remotePatterns` に `*.public.blob.vercel-storage.com` 登録済み）。
-- **無料枠の目安**: ストレージ約1GB・月数GB転送。アップロード時にクライアント圧縮（アルバムは長辺1600px/JPEG0.8 ≈ 0.3〜0.6MB）で 1GB あたり約2,000枚。
-- アルバムは**ログイン必須ページ**でガード（A 案）。閲覧・投稿はメンバー、写真削除は管理者または投稿者本人、アルバム削除は管理者。
+（変更なし。詳細は Rev1.0 参照）
+
+**追加機能（Rev1.1）:**
+- **ライトボックス**: `PhotoGrid` コンポーネントで写真クリック時にモーダル表示。← → キーボードナビ対応。
+- **いいね**: `PhotoLike` テーブルで管理。1人1いいね、再押しで取り消し（トグル方式）。
 
 ---
 
 ## 18. データ取込（teams.one スクレイピング）
 
-ファイル: `prisma/scrape-details.ts`（実行: `npx tsx prisma/scrape-details.ts`、再処理は `RESCAN=1`）。
+（既存の `prisma/scrape-details.ts` は変更なし）
 
-- 229 試合分の teams.one ゲーム ID を内蔵。各ページの打者・投手成績テーブル、イニングスコア、会場をパース。
-- ユーザー解決: 背番号 → 正規化名 → そのまま、の順。未一致は `getOrCreatePlayerId`（背番号有=元メンバー / 無=助っ人）で作成。
-- `MEMBER_ALIASES` で別表記を既存メンバーに統合。
-- 取込済み試合は通常スキップ（投手成績の有無で判定）。`RESCAN=1` で全件再処理。
-- 補修用スクリプトが `scripts/` に複数（audit-stats, fix-stats, check-* 等）。
+**追加スクリプト（Rev1.1）:**
+
+| スクリプト | 用途 |
+|---|---|
+| `scripts/fix-historical-stats.ts` | 全試合の成績を teams.one から再取得し**名前ベース**で正しい選手に再割り当て。未登録選手は元メンバーとして自動作成。背番号重複による誤帰属を根本修正。 |
+| `scripts/fix-duplicate-stats.ts` | 背番号重複選手の成績を名前マッチングで修正。 |
+| `scripts/fix-shinnosuke.ts` | 特定選手の入団前データ削除（一時利用）。 |
+| `scripts/check-tsurasan.ts` | 特定選手の teams.one データ照合（一時利用）。 |
+
+**名前解決ロジック（Rev1.1 強化）:**
+1. 完全一致
+2. エイリアス解決（表記揺れ: `りゅうせい` ↔ `RYUSEI` 等）
+3. 省略名（`…` 末尾: `K .KA…` → `K.KAZU`）
+4. 部分一致（元DB選手のみ対象、候補1件の場合のみ採用）
+5. 解決不能 → スキップ（誤挿入防止）
 
 ---
 
 ## 19. DB マイグレーション運用
 
-- **方式**: `prisma/migrate.ts` がビルド時に **冪等な SQL（ALTER ADD COLUMN / CREATE TABLE IF NOT EXISTS / CREATE INDEX IF NOT EXISTS）** を libsql に直接適用。`schema.prisma` も同時に更新してクライアント型を生成。
-- 既適用の履歴（抜粋）: User.photoUrl / Game.scorebook / Schedule.dayGroupId(+index) / Game.scorePhoto / Setting テーブル / PhotoAlbum・Photo / User.isGuest。
-- **新カラム追加の手順**:
-  1. `schema.prisma` にカラム/モデル追加
-  2. `migrate.ts` に冪等 SQL を追記
-  3. `npx tsx prisma/migrate.ts && npx prisma generate`（ローカル確認）
-  4. commit → デプロイ（ビルド時に本番 Turso へ適用）
-- ⚠️ SQLite は NOT NULL 解除や型変更が苦手。`ADD COLUMN` 中心で設計する。
+**方式**: `prisma/migrate.ts` がビルド時に冪等 SQL を libsql に直接適用。
+
+**Rev1.1 追加テーブル:**
+- `MvpVote`: MVP投票（v11）
+- `PhotoLike`: 写真いいね（v12）
+
+**新カラム追加の手順（変更なし）:**
+1. `schema.prisma` にカラム/モデル追加
+2. `migrate.ts` に冪等 SQL を追記
+3. `npx tsx prisma/migrate.ts && npx prisma generate`（ローカル確認）
+4. commit → デプロイ（ビルド時に本番 Turso へ適用）
 
 ---
 
 ## 20. 共通 UX
 
-- **トースト**: `Toast`（URL `?toast=` 方式、2.8 秒で自動消去。URL 検出 effect と消去タイマー effect を分離して「消えない」不具合を回避）。日程追加・LINE 送信は専用のクライアントトースト。
-- **ローディング**: `src/app/loading.tsx`（全ルート共通スピナー）、`/admin/loading.tsx`、`/results/loading.tsx`、`/results/[id]/loading.tsx`（スケルトン）で遷移の体感を改善。
+- **トースト**: `Toast`（URL `?toast=` 方式、2.8 秒で自動消去）。
 - **確認ダイアログ**: 削除等は `SubmitButton confirm=...` または `window.confirm`。
-- **パフォーマンス**: 管理画面の重いページは DB クエリを `Promise.all` で並列化。
+- **出欠ボタン**: `AttendanceButtons`（クライアント）。確認ダイアログ → 登録中スピナー → 完了。
+- **loading.tsx**: `/schedule`、`/stats`、`/stats/ranking`、`/members`、`/members/[id]`、`/results`、`/results/[id]`、`/admin` に配置。
 
 ---
 
-## 21. 既知の制約・注意点
+## 21. パフォーマンス設計（Rev1.1 追加）
 
-1. **OCR 精度**: モバイル撮影は画質・サイズ制約で誤読あり。読み取り後は人間が手修正する前提。
-2. **背番号の再利用**: 年代をまたいで同じ背番号が別人に再割当された場合、取込時の背番号一致で別人に紐づくリスク（pre-existing）。
-3. **助っ人の臨時番号**: 取込で `#100〜#102` 等の臨時番号が「元メンバー」と判定される場合あり。必要に応じ手動で isGuest に戻す。
-4. **スケジュール削除と lineupData**: 日程を削除→再作成すると ID が変わり、`lineupData_{旧ID}` が孤立しスタメンがプリセットされない（要再登録）。※将来は削除時の `lineupData_/lineupNote_` 連動削除を推奨。
-5. **Blob は公開 URL**: 完全な非公開ではない（ページはログインでガード）。
-6. **CRLF 警告**: Windows 環境で git が LF→CRLF 変換警告を出すが動作影響なし。
-
----
-
-## 22. 運用手順（よくある操作）
-
-- **日程追加**: `/admin/schedule` → 日付・種別・対戦相手・場所・集合/開始・メモ → 追加（EVENT は対戦相手不要、内容を記入）。
-- **スタメン登録**: `/admin/lineup` → 対象試合を選び打順・守備・交代を設定 → 保存（→ 結果入力画面に自動プリセット）。LINE 配信も可。
-- **試合結果入力**: `/admin/game` → 試合選択 → （スタメン/既存成績からプリセット）→ 「シートから読み込み」で OCR or 手入力 → BLITZ 得点はイニング欄で手修正可 → 保存（LINE 送信可）。
-- **試合結果の削除**: `/results` の管理者用「削除」（結果のみ削除、日程は残る）。
-- **出欠リマインド/出欠表送信**: `/admin` の各ボタンからプレビュー → 送信。
-- **写真アルバム**: `/album`（ログイン）→ アルバム作成（日付＋タイトル）→ 写真追加。
-- **規定打席の調整**: `/admin/settings`。
+| ページ | 方式 | 備考 |
+|---|---|---|
+| `/members` | ISR `revalidate=3600` | メンバー追加/退団/復帰時に `revalidatePath` で即時更新 |
+| `/members/[id]` | ISR `revalidate=3600` | 成績保存時に `revalidatePath` で更新 |
+| `/results/[id]` | `dynamic='force-dynamic'` | MVP投票があるため動的（Rev1.1 で変更） |
+| `/stats` | `dynamic='force-dynamic'` | searchParams 使用のため |
+| `/stats/ranking` | ISR `revalidate=3600` | 成績保存時に更新 |
+| `/admin/*` | `dynamic='force-dynamic'` または `force-dynamic` | 管理画面は常に最新 |
 
 ---
 
-## 23. 開発・ビルド・デプロイ手順
+## 22. 既知の制約・注意点
+
+1. **OCR 精度**: モバイル撮影は誤読あり。手修正前提。
+2. **背番号の再利用**: 同じ番号が年代をまたいで別人に使われる場合、`fix-historical-stats.ts` で名前ベース修正が必要。
+3. **助っ人の臨時番号**: 取込で `#100〜#102` 等が「元メンバー」判定される場合あり。
+4. **スケジュール削除と lineupData**: 日程削除→再作成で `lineupData_{旧ID}` が孤立。
+5. **Blob は公開 URL**: ページはログインでガードしているが URL 直接アクセスは可能。
+6. **退団→復帰後の背番号重複**: 退団中に別の人が同じ番号を使った場合、復帰時に番号変更が必要。
+
+---
+
+## 23. 運用手順（よくある操作）
+
+- **日程追加**: `/admin/schedule` → 入力 → 追加。
+- **スタメン登録**: `/admin/lineup` → 対象試合 → 打順/守備/交代 → 保存。LINE 配信可。
+- **試合結果入力**: `/admin/game` → 試合選択 → 先攻/後攻設定 → OCR or 手入力 → 保存（LINE 送信可）。
+- **退団処理**: `/admin/members` → 対象選手「退団」ボタン → 確認ダイアログ。
+- **復帰処理**: `/admin/members` → 元メンバーセクションの「復帰」リンク → 背番号確認/変更 → 「復帰する」。
+- **助っ人昇格**: `/admin/members` → 助っ人セクションの「メンバーに追加」→ 確認ダイアログ → 背番号入力 → 「メンバーに追加する」。
+- **規定打席/投球回の調整**: `/admin/settings`。
+- **写真アルバム**: `/album`（ログイン）→ アルバム作成 → 写真追加 → クリックでライトボックス表示。
+- **歴代成績の閲覧**: `/stats?mode=all` または `/stats/ranking?stat=avg` などランキングページ。
+
+---
+
+## 24. 開発・ビルド・デプロイ手順
 
 ```bash
 # 依存インストール（postinstall で prisma generate）
@@ -474,33 +516,33 @@ npm install
 # 開発サーバ
 npm run dev
 
-# 型チェック / Lint
+# 型チェック
 npx tsc --noEmit
-npm run lint
 
 # 本番ビルド（migrate.ts → prisma generate → next build）
 npm run build
 
-# デプロイ（どちらか）
+# デプロイ
 git push origin main          # Vercel 自動デプロイ
 npx vercel deploy --prod      # 手動デプロイ
+
+# スクリプト実行（DATABASE_DIRECT_URL または DATABASE_URL が必要）
+npx tsx scripts/fix-historical-stats.ts --dry  # ドライラン
+npx tsx scripts/fix-historical-stats.ts        # 本番実行
 ```
 
-- コミットメッセージ末尾は `Co-Authored-By: Claude ...` を付与。
-- `main` に push すると Vercel が自動ビルド & デプロイ。ビルド時に Turso へマイグレーションが走る。
-
 ---
 
-## 24. 今後の TODO / 改善候補
+## 25. 今後の TODO / 改善候補
 
 - 日程削除時に `lineupData_/lineupNote_` 設定も連動削除（孤立防止）。
-- 助っ人の臨時番号（#100〜）を助っ人に戻す微調整 UI。
-- 年代をまたぐ背番号衝突に耐える選手解決（名前 + 年度の複合判定）。
-- 公開ページのキャッシュ化（ISR）による表示高速化（現状はほぼ動的 ＝ 毎回 DB アクセス）。
-- スコアシート OCR の精度向上（前処理・プロンプト改善）。
-- 退団メンバーの「現役/OB」区分の導入（現状は isGuest と現役が混在しうる）。
-- アルバムの厳格な非公開化（認証付き配信）が必要なら B 案を検討。
+- スコアシート OCR の精度向上。
+- アルバムの厳格な非公開化（認証付き配信）が必要なら検討。
+- ~~退団メンバーの「現役/OB」区分の導入~~ → **Rev1.1 で実装済み（退団/復帰フロー）**。
+- ~~公開ページのキャッシュ化（ISR）~~ → **Rev1.1 で主要ページに ISR 適用済み**。
+- MVP投票結果の LINE 通知（投票締切後に自動送信）。
+- 月間表彰（打率王・打点王・出席率1位）のホーム表示。
 
 ---
 
-_本ドキュメントは仮運用開始時点のスナップショット。仕様変更時は本ファイル（`docs/AS_BUILT.md`）も更新すること。_
+_本ドキュメントは Rev1.1（2026-06）時点のスナップショット。仕様変更時は本ファイル（`docs/AS_BUILT.md`）も更新すること。_

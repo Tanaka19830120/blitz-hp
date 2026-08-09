@@ -49,6 +49,7 @@ export interface ScoreBookData {
   opponentScore?: number | null
   inningScores?:  { our: (number | null)[]; opponent: (number | null)[] }
   note?:          string
+  oppFirst?:      boolean
 }
 
 export interface BatterStats {

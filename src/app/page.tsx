@@ -2,10 +2,22 @@ import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
 import Image from 'next/image'
 import { getGameTypeLabels } from '@/lib/settings'
+import { GameDayBanner } from '@/components/GameDayBanner'
+import { WinStreakFire } from '@/components/WinStreakFire'
+
+export const revalidate = 0
 
 async function getHomeData() {
   const now = new Date()
-  const [games, nextSchedule, totalGames, gameTypeLabels] = await Promise.all([
+  // Vercel は UTC 動作のため、JST(UTC+9)で「今日」を計算する
+  const JST = 9 * 3600 * 1000
+  const nowJST = new Date(now.getTime() + JST)
+  const todayStartJST = new Date(nowJST); todayStartJST.setUTCHours(0, 0, 0, 0)
+  const todayEndJST   = new Date(nowJST); todayEndJST.setUTCHours(23, 59, 59, 999)
+  const todayStart = new Date(todayStartJST.getTime() - JST) // UTC換算
+  const todayEnd   = new Date(todayEndJST.getTime()   - JST) // UTC換算
+
+  const [games, nextSchedule, totalGames, gameTypeLabels, todaySchedules, recentForStreak] = await Promise.all([
     prisma.game.findMany({
       take: 6,
       orderBy: { schedule: { date: 'desc' } },
@@ -20,11 +32,31 @@ async function getHomeData() {
       _count: { result: true },
     }),
     getGameTypeLabels(),
+    // 今日の試合スケジュール
+    prisma.schedule.findMany({
+      where: { date: { gte: todayStart, lte: todayEnd } },
+      orderBy: { date: 'asc' },
+    }),
+    // 連勝計算用（直近20試合）
+    prisma.game.findMany({
+      take: 20,
+      orderBy: { schedule: { date: 'desc' } },
+      select: { result: true },
+    }),
   ])
-  const wins = totalGames.find((g) => g.result === 'WIN')?._count.result ?? 0
+
+  const wins   = totalGames.find((g) => g.result === 'WIN')?._count.result  ?? 0
   const losses = totalGames.find((g) => g.result === 'LOSE')?._count.result ?? 0
-  const draws = totalGames.find((g) => g.result === 'DRAW')?._count.result ?? 0
-  return { games, nextSchedule, wins, losses, draws, gameTypeLabels }
+  const draws  = totalGames.find((g) => g.result === 'DRAW')?._count.result ?? 0
+
+  // 現在の連勝数
+  let winStreak = 0
+  for (const g of recentForStreak) {
+    if (g.result === 'WIN') winStreak++
+    else break
+  }
+
+  return { games, nextSchedule, wins, losses, draws, gameTypeLabels, todaySchedules, winStreak }
 }
 
 function formatDate(date: Date) {
@@ -40,11 +72,25 @@ function daysUntil(date: Date) {
 }
 
 export default async function HomePage() {
-  const { games, nextSchedule, wins, losses, draws, gameTypeLabels } = await getHomeData()
+  const { games, nextSchedule, wins, losses, draws, gameTypeLabels, todaySchedules, winStreak } = await getHomeData()
   const total = wins + losses + draws
 
   return (
-    <div className="pt-16">
+    <div className="">
+      {/* 試合当日バナー */}
+      {todaySchedules.length > 0 && (
+        <GameDayBanner
+          games={todaySchedules.map(s => ({
+            opponent:  s.opponent,
+            location:  s.location,
+            meetTime:  s.meetTime,
+            startTime: s.startTime,
+            date:      s.date.toISOString(),
+          }))}
+        />
+      )}
+      {/* 連勝中の炎 */}
+      <WinStreakFire streak={winStreak} />
       {/* Hero */}
       <section className="relative overflow-hidden min-h-[100svh] flex items-center">
         {/* AI-generated softball action photo background */}
@@ -131,6 +177,27 @@ export default async function HomePage() {
                   🏟 チームプロフィール
                 </Link>
               </div>
+
+              {/* 問い合わせCTA */}
+              <Link
+                href="/contact"
+                className="inline-flex items-center gap-3 mt-8 px-6 py-4 rounded-2xl border transition-all group"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(34,197,94,0.12) 0%, rgba(16,185,129,0.08) 100%)',
+                  borderColor: 'rgba(34,197,94,0.4)',
+                }}
+              >
+                <span className="text-2xl">⚾</span>
+                <div>
+                  <div className="text-sm font-black text-[#e2e8f0] group-hover:text-white transition-colors">
+                    体験参加・入団希望はこちら
+                  </div>
+                  <div className="text-xs text-[#64748b] mt-0.5">
+                    経験者・未経験者問わず大歓迎！まずはお気軽に
+                  </div>
+                </div>
+                <span className="text-[#22c55e] text-lg ml-auto group-hover:translate-x-1 transition-transform">→</span>
+              </Link>
             </div>
 
           </div>

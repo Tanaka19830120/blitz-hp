@@ -8,7 +8,7 @@ import { parse as parseHTML } from 'node-html-parser'
 import 'dotenv/config'
 
 const adapter = new PrismaLibSql({
-  url: process.env.DATABASE_URL ?? 'file:./dev.db',
+  url: process.env.DATABASE_DIRECT_URL ?? 'file:./dev.db',
   authToken: process.env.DATABASE_AUTH_TOKEN,
 })
 const prisma = new PrismaClient({ adapter } as ConstructorParameters<typeof PrismaClient>[0])
@@ -83,6 +83,12 @@ const PCOL = {
 // teams.one 上の名前（正規化前）→ 既存メンバーの「名前 or 背番号」で特定
 const MEMBER_ALIASES: { aliases: string[]; matchName?: string; matchNumber?: number }[] = [
   { aliases: ['りゅうせい', 'リュウセイ'], matchName: 'RYUSEI' },
+  // teams.one が長い名前を "K .KA…" のように末尾を省略する場合の対応
+  { aliases: ['K .KA…', 'K.KA…', 'K .KAZU'], matchName: 'K.KAZU' },
+  // teams.one が "なかしょう…" と省略する場合
+  { aliases: ['なかしょう…'], matchName: 'なかしょう' },
+  // teams.one 上の旧表記
+  { aliases: ['ちぃ'], matchName: 'ちぃ弟' },
 ]
 
 function sleep(ms: number) {
@@ -303,18 +309,12 @@ async function main() {
     }
   }
 
-  function resolveUserId(name: string, jerseyNumber: string): string | undefined {
-    // 1. 名前を最優先（背番号の衝突: 7 と 07 が同じ7になる問題を回避）
+  function resolveUserId(name: string, _jerseyNumber: string): string | undefined {
+    // 名前のみで一致（背番号フォールバックは廃止: 同番号の別選手に誤マッチするため）
     const byNorm = nameToUserId[normName(name)]
     if (byNorm) return byNorm
     const byExact = nameToUserId[name.trim()]
     if (byExact) return byExact
-    // 2. 背番号（名前で一致しない場合のフォールバック。"-"/空はスキップ）
-    const num = parseInt(jerseyNumber, 10)
-    if (!isNaN(num) && num > 0) {
-      const byNum = numberToUserId[num]
-      if (byNum) return byNum
-    }
     return undefined
   }
 

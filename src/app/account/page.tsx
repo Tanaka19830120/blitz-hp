@@ -49,7 +49,7 @@ export default async function AccountPage({
   const session = await auth()
   if (!session?.user) {
     return (
-      <div className="pt-16 max-w-md mx-auto px-4 py-20 text-center">
+      <div className="max-w-md mx-auto px-4 py-20 text-center">
         <h1 className="text-2xl font-black text-[#e2e8f0] mb-3">アカウント</h1>
         <p className="text-[#64748b] mb-6">ログインが必要です。</p>
         <Link href="/login" className="btn-primary">ログイン</Link>
@@ -59,7 +59,7 @@ export default async function AccountPage({
   const sp = await searchParams
 
   return (
-    <div className="pt-16 max-w-md mx-auto px-4 py-12">
+    <div className="max-w-md mx-auto px-4 py-12">
       <h1 className="text-2xl font-black text-[#e2e8f0] mb-2">アカウント</h1>
       <p className="text-sm text-[#64748b] mb-8">{session.user.name} さん</p>
 

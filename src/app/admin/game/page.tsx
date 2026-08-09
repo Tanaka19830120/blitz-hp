@@ -24,7 +24,7 @@ async function saveGame(scheduleId: string, json: string, sendLine: boolean): Pr
 
   // イニングスコアを {blitz, opponent} 形式で保存（公開ページ表示用）
   const inningScores = data.inningScores
-    ? JSON.stringify({ blitz: data.inningScores.our, opponent: data.inningScores.opponent })
+    ? JSON.stringify({ blitz: data.inningScores.our, opponent: data.inningScores.opponent, blitzFirst: !data.oppFirst })
     : null
 
   // Game を upsert（スコアブック JSON も保存）
@@ -395,7 +395,7 @@ export default async function AdminGamePage({
   }
 
   return (
-    <div className="pt-16 max-w-5xl mx-auto px-4 py-12">
+    <div className="max-w-5xl mx-auto px-4 py-12">
       <div className="flex items-center gap-4 mb-8">
         <Link href="/admin" className="text-[#64748b] hover:text-[#94a3b8]">← 管理</Link>
         <h1 className="text-2xl font-black text-[#e2e8f0]">試合結果を入力・編集</h1>
@@ -484,6 +484,7 @@ export default async function AdminGamePage({
                 sendLineAction={sendGameResultLine}
                 lineConfigured={lineConfigured}
                 scheduleInfo={{
+                  id:       selected.id,
                   date:     selected.date.toISOString(),
                   opponent: selected.opponent,
                 }}

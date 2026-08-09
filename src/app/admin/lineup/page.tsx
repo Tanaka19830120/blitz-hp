@@ -234,7 +234,6 @@ export default async function AdminLineupPage({
       ].filter(Boolean).join(' ')
     }
   }
-
   const lineConfigured = !!(process.env.LINE_CHANNEL_ACCESS_TOKEN &&
     (process.env.LINE_GROUP_ID ||
       await prisma.setting.findUnique({ where: { key: 'detectedLineGroupId' } }).then(s => s?.value ?? '').catch(() => '')))
@@ -364,7 +363,7 @@ export default async function AdminLineupPage({
   }
 
   return (
-    <div className="pt-16 max-w-2xl mx-auto px-4 py-12">
+    <div className="max-w-2xl mx-auto px-4 py-12">
       <div className="flex items-center gap-4 mb-8">
         <Link href="/admin" className="text-[#64748b] hover:text-[#94a3b8]">← 管理</Link>
         <h1 className="text-2xl font-black text-[#e2e8f0]">スタメン入力</h1>

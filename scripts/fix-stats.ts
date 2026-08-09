@@ -13,7 +13,7 @@ const DELAY_MS = 700
 const DRY_RUN = process.argv.includes('--dry')
 
 const client = createClient({
-  url: process.env.DATABASE_URL ?? 'file:./dev.db',
+  url: process.env.DATABASE_DIRECT_URL ?? process.env.DATABASE_URL ?? 'file:./dev.db',
   authToken: process.env.DATABASE_AUTH_TOKEN ?? undefined,
 })
 
@@ -144,15 +144,28 @@ async function main() {
     const users = byNumberMulti.get(number)
     if (!users || users.length === 0) return undefined
     if (users.length === 1) return users[0].id
-    // 重複: 名前の先頭一致で解決
+
+    // 重複背番号: 名前で解決を試みる
     const normalized = teamsOneName.replace(/\s+/g, '').toUpperCase()
+    // 1. 完全一致
     for (const u of users) {
-      if (u.name.replace(/\s+/g, '').toUpperCase().startsWith(normalized.slice(0, 3)) ||
-          normalized.startsWith(u.name.replace(/\s+/g, '').toUpperCase().slice(0, 3))) {
+      if (u.name.replace(/\s+/g, '').toUpperCase() === normalized) return u.id
+    }
+    // 2. 部分一致（互いに含む）
+    for (const u of users) {
+      const uNorm = u.name.replace(/\s+/g, '').toUpperCase()
+      if (uNorm.includes(normalized) || normalized.includes(uNorm)) return u.id
+    }
+    // 3. 先頭3文字一致
+    for (const u of users) {
+      const uNorm = u.name.replace(/\s+/g, '').toUpperCase()
+      if (uNorm.startsWith(normalized.slice(0, 3)) || normalized.startsWith(uNorm.slice(0, 3))) {
         return u.id
       }
     }
-    return users[0].id  // フォールバック: 最初のユーザー
+    // 解決できない場合は undefined を返してスキップ（誤挿入防止）
+    console.warn(`  ⚠ 背番号${number}が複数ヒット（${users.map(u => u.name).join(', ')}）、名前「${teamsOneName}」で解決できずスキップ`)
+    return undefined
   }
 
   // 全試合取得

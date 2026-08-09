@@ -17,7 +17,8 @@ export default async function ProfilePage() {
     getProfileSetting('profile_records'),
   ])
 
-  const winRate     = totalGames > 0 ? Math.round((wins / totalGames) * 100) : 0
+  const decidedGames = wins + losses  // 引き分けを分母から除外
+  const winRate     = decidedGames > 0 ? Math.round((wins / decidedGames) * 100) : 0
   const infoItems   = parseKVLines(infoRaw)
   const groundItems = parseKVLines(groundsRaw)
   const records     = parseRecordLines(recordsRaw)
@@ -25,7 +26,7 @@ export default async function ProfilePage() {
   const paragraphs  = about.split('\n\n').map(p => p.trim()).filter(Boolean)
 
   return (
-    <div className="pt-16 max-w-4xl mx-auto px-4 py-12">
+    <div className="max-w-4xl mx-auto px-4 py-12">
       <div className="mb-8">
         <h1 className="text-3xl font-black text-[#e2e8f0] mb-2">チームプロフィール</h1>
         <p className="text-[#64748b]">BLITZ ソフトボールチームについて</p>

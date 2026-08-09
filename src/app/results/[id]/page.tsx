@@ -2,7 +2,24 @@ import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { auth } from '@/auth'
+import { revalidatePath } from 'next/cache'
 import { calcBatterStats, cellColor, codeToJa, type ScoreBookData, type BatterStats } from '@/lib/scorebook'
+import AdminEditLink from '@/components/AdminEditLink'
+import MvpVote from '@/components/MvpVote'
+
+export const dynamic = 'force-dynamic'
+
+async function castMvpVote(gameId: string, nomineeId: string): Promise<void> {
+  'use server'
+  const session = await auth()
+  if (!session?.user?.id) return
+  await prisma.mvpVote.upsert({
+    where:  { gameId_voterId: { gameId, voterId: session.user.id } },
+    create: { gameId, voterId: session.user.id, nomineeId },
+    update: {},   // 既に投票済みなら無視
+  })
+  revalidatePath(`/results/${gameId}`)
+}
 
 function formatDate(date: Date) {
   return new Date(date).toLocaleDateString('ja-JP', {
@@ -42,6 +59,7 @@ const STAT_COLS: { key: keyof BatterStats; label: string; always?: boolean }[] =
 
 export default async function GameDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const session = await auth()
 
   const schedule = await prisma.schedule.findUnique({
     where: { id },
@@ -49,13 +67,14 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
       game: {
         include: {
           stats: {
-            include: { user: { select: { name: true, number: true, isGuest: true } } },
+            include: { user: { select: { id: true, name: true, number: true, isGuest: true } } },
             orderBy: [{ battingOrder: 'asc' }, { plateAppearances: 'desc' }],
           },
           pitchingStats: {
             include: { user: { select: { name: true, number: true, isGuest: true } } },
             orderBy: { id: 'asc' },
           },
+          mvpVotes: { select: { voterId: true, nomineeId: true } },
         },
       },
     },
@@ -63,10 +82,22 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
 
   if (!schedule || !schedule.game) notFound()
 
-  const session = await auth()
-  const isAdmin = (session?.user as { role?: string })?.role === 'ADMIN'
-
   const game = schedule.game
+
+  // MVP投票データ
+  const mvpCandidates = game.stats
+    .filter(s => !s.user.isGuest && s.plateAppearances > 0)
+    .map(s => ({ id: s.user.id, name: s.user.name, number: s.user.number }))
+  const mvpVoteCounts = mvpCandidates.map(c => ({
+    nomineeId: c.id,
+    count: game.mvpVotes.filter(v => v.nomineeId === c.id).length,
+  }))
+  const myVoteId = session?.user?.id
+    ? (game.mvpVotes.find(v => v.voterId === session.user!.id)?.nomineeId ?? null)
+    : null
+  const gameDate  = new Date(schedule.date)
+  const votingOpen = session?.user && mvpCandidates.length > 0
+    && (Date.now() - gameDate.getTime()) < 14 * 24 * 60 * 60 * 1000  // 2週間
   const { label: typeLabel2, cls: typeCls } = typeLabel(schedule.type)
 
   // スコアブック JSON をパース（イニング別の打撃結果）
@@ -159,7 +190,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
   const teamAvg = avgStr(totals.h, totals.ab)
 
   return (
-    <div className="pt-16 max-w-6xl mx-auto px-4 py-12">
+    <div className="max-w-6xl mx-auto px-4 py-12">
       {/* パンくずリスト */}
       <div className="flex items-center gap-2 text-sm text-[#64748b] mb-6">
         <Link href="/results" className="hover:text-[#60a5fa] transition-colors">試合結果</Link>
@@ -180,14 +211,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
           {schedule.location && (
             <span className="text-sm text-[#64748b]">📍 {schedule.location}</span>
           )}
-          {isAdmin && (
-            <Link
-              href={`/admin/schedule?edit=${schedule.id}`}
-              className="text-xs px-2 py-0.5 rounded border border-[#a78bfa]/40 text-[#a78bfa] hover:bg-[#a78bfa]/10 transition-all"
-            >
-              📍 場所を編集
-            </Link>
-          )}
+          <AdminEditLink scheduleId={schedule.id} />
         </div>
 
         <div className="flex flex-row items-start justify-center gap-3 sm:gap-8">
@@ -518,6 +542,18 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
         <div className="glass-card rounded-2xl p-4 mb-6 text-sm text-[#94a3b8]">
           📝 {game.note}
         </div>
+      )}
+
+      {/* MVP投票 */}
+      {mvpCandidates.length > 0 && (
+        <MvpVote
+          gameId={game.id}
+          candidates={mvpCandidates}
+          voteCounts={mvpVoteCounts}
+          myVoteId={myVoteId}
+          votingOpen={!!votingOpen}
+          voteAction={castMvpVote}
+        />
       )}
     </div>
   )

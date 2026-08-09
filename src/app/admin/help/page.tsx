@@ -24,7 +24,7 @@ function Step({ n, children }: { n: number; children: React.ReactNode }) {
 
 export default function AdminHelpPage() {
   return (
-    <div className="pt-16 max-w-3xl mx-auto px-4 py-12">
+    <div className="max-w-3xl mx-auto px-4 py-12">
       <div className="flex items-center gap-4 mb-6">
         <Link href="/admin" className="text-[#64748b] hover:text-[#94a3b8]">← 管理</Link>
         <h1 className="text-2xl font-black text-[#e2e8f0]">🛠 管理者ガイド</h1>

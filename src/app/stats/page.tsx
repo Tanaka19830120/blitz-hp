@@ -1,10 +1,13 @@
 import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
+
+export const revalidate = 3600
 import {
   getBattingStats,
   getAvailableYears,
   getTotalGames,
   getQualPaPerGame,
+  getQualIpPerGame,
   type PlayerStats,
 } from '@/lib/statsQueries'
 
@@ -47,7 +50,7 @@ function displayInnings(outs: number): string {
   return `${full} ${frac}/3`
 }
 
-async function getPitchingStats(year?: number): Promise<PitcherStats[]> {
+async function getPitchingStats(year?: number, includeAlumni = false): Promise<PitcherStats[]> {
   let dateFilter: { gte?: Date; lte?: Date } | undefined
   if (year) {
     dateFilter = {
@@ -57,7 +60,9 @@ async function getPitchingStats(year?: number): Promise<PitcherStats[]> {
   }
 
   const players = await prisma.user.findMany({
-    where: { isGuest: false },
+    where: includeAlumni
+      ? { isGuest: false }
+      : { isGuest: false, email: { endsWith: '@b' } },
     include: {
       pitchingStats: {
         include: {
@@ -114,29 +119,61 @@ async function getPitchingStats(year?: number): Promise<PitcherStats[]> {
 export default async function StatsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ year?: string }>
+  searchParams: Promise<{ year?: string; mode?: string }>
 }) {
   const sp = await searchParams
   const years = await getAvailableYears()
-  const currentYear = new Date().getFullYear()
 
-  // デフォルトは最新年。?year=all で通算、?year=2026 で特定年。
   const isCareer = sp.year === 'all'
   const selectedYear = isCareer
     ? undefined
     : sp.year
       ? parseInt(sp.year)
-      : years[0]   // 何も指定がなければ最新年
+      : years[0]
 
-  const [stats, pitchingStats, totalGames, qualPaPerGame] = await Promise.all([
-    getBattingStats(selectedYear),
-    getPitchingStats(selectedYear),
+  const isAllTime = sp.mode === 'all'
+
+  const [stats, pitchingStats, totalGames, qualPaPerGame, qualIpPerGame] = await Promise.all([
+    getBattingStats(selectedYear, isAllTime),
+    getPitchingStats(selectedYear, isAllTime),
     getTotalGames(selectedYear),
     getQualPaPerGame(),
+    getQualIpPerGame(),
   ])
+
+  // ── 出場試合数ランキング ──
+  const streakRanking = await (async () => {
+    const dateFilter = selectedYear
+      ? { gte: new Date(`${selectedYear}-01-01`), lte: new Date(`${selectedYear}-12-31T23:59:59`) }
+      : undefined
+    const [players, teamTotal] = await Promise.all([
+      prisma.user.findMany({
+        where: isAllTime ? { isGuest: false } : { isGuest: false, email: { endsWith: '@b' } },
+        select: {
+          id: true, name: true, number: true,
+          gameStats: {
+            where: dateFilter ? { game: { schedule: { date: dateFilter } } } : {},
+            select: { id: true },
+          },
+        },
+      }),
+      prisma.game.count({ where: dateFilter ? { schedule: { date: dateFilter } } : {} }),
+    ])
+    return players
+      .map(p => ({
+        id: p.id, name: p.name, number: p.number,
+        total: p.gameStats.length,
+        rate: teamTotal > 0 ? Math.round(p.gameStats.length / teamTotal * 100) : 0,
+      }))
+      .filter(p => p.total > 0)
+      .sort((a, b) => b.total - a.total)
+  })()
+
 
   // ランキングリンクの year クエリ（通算は all、年指定はその年、デフォルトは最新年）
   const rankYearParam = isCareer ? 'all' : selectedYear != null ? String(selectedYear) : ''
+  // mode クエリを year リンクに引き継ぐ
+  const modeParam = isAllTime ? '&mode=all' : ''
 
   // Only split into qualified/not-qualified when there are actually qualified players.
   // In career mode the threshold is very high, so everyone typically falls into notQualified
@@ -172,16 +209,40 @@ export default async function StatsPage({
       ]
 
   return (
-    <div className="pt-16 max-w-7xl mx-auto px-4 py-12">
-      <div className="mb-8">
+    <div className="max-w-7xl mx-auto px-4 py-12">
+      <div className="mb-4">
         <h1 className="text-3xl font-black text-[#e2e8f0] mb-2">個人成績</h1>
         <p className="text-[#64748b]">打撃・投手個人成績</p>
+      </div>
+
+      {/* 現メンバー / 歴代全員 切り替え */}
+      <div className="flex gap-2 mb-5">
+        <Link
+          href={`/stats${selectedYear && !isCareer ? `?year=${selectedYear}` : isCareer ? '?year=all' : ''}`}
+          className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-all ${
+            !isAllTime
+              ? 'bg-[#2563eb] border-[#2563eb] text-white'
+              : 'border-[#1e3a5f] text-[#64748b] hover:border-[#2563eb]/50 hover:text-[#94a3b8]'
+          }`}
+        >
+          現メンバー
+        </Link>
+        <Link
+          href={`/stats?mode=all${selectedYear && !isCareer ? `&year=${selectedYear}` : isCareer ? '&year=all' : ''}`}
+          className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-all ${
+            isAllTime
+              ? 'bg-[#8b5cf6] border-[#8b5cf6] text-white'
+              : 'border-[#1e3a5f] text-[#64748b] hover:border-[#8b5cf6]/50 hover:text-[#94a3b8]'
+          }`}
+        >
+          歴代全員
+        </Link>
       </div>
 
       {/* Season tabs */}
       <div className="flex flex-wrap gap-2 mb-8">
         <Link
-          href="/stats?year=all"
+          href={`/stats?year=all${modeParam}`}
           className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-all ${
             isCareer
               ? 'bg-[#2563eb] border-[#2563eb] text-white'
@@ -193,7 +254,7 @@ export default async function StatsPage({
         {years.map((year) => (
           <Link
             key={year}
-            href={`/stats?year=${year}`}
+            href={`/stats?year=${year}${modeParam}`}
             className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-all ${
               !isCareer && selectedYear === year
                 ? 'bg-[#2563eb] border-[#2563eb] text-white'
@@ -201,7 +262,7 @@ export default async function StatsPage({
             }`}
           >
             {year}年
-            {year === currentYear && <span className="ml-1 text-[10px] text-[#60a5fa]">●</span>}
+            {year === years[0] && <span className="ml-1 text-[10px] text-[#60a5fa]">●</span>}
           </Link>
         ))}
       </div>
@@ -209,12 +270,12 @@ export default async function StatsPage({
       {/* Rankings */}
       {stats.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-          {[
+          {([
             { title: '打率', stat: 'avg', data: topAvg, key: 'avg' as const, color: 'text-[#60a5fa]' },
             { title: '打点', stat: 'rbi', data: topRbi, key: 'rbi' as const, color: 'text-[#fbbf24]' },
             { title: '安打', stat: 'hits', data: topHits, key: 'hits' as const, color: 'text-[#22c55e]' },
             { title: '本塁打', stat: 'homeRuns', data: topHr, key: 'homeRuns' as const, color: 'text-[#ef4444]' },
-          ].map(({ title, stat, data, key, color }) => (
+          ] as const).map(({ title, stat, data, key, color }) => (
             <div key={title} className="glass-card rounded-xl p-4">
               <Link
                 href={`/stats/ranking?stat=${stat}${rankYearParam ? `&year=${rankYearParam}` : ''}`}
@@ -238,6 +299,35 @@ export default async function StatsPage({
                   </div>
                 ))
               )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* 投手ランキングカード */}
+      {pitchingStats.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 mb-8">
+          {([
+            { title: '防御率', stat: 'era',  color: 'text-[#a78bfa]', top: [...pitchingStats].sort((a,b) => a.era==='---'?1:b.era==='---'?-1:parseFloat(a.era)-parseFloat(b.era)).slice(0,3), display: (p: typeof pitchingStats[0]) => p.era },
+            { title: '勝利数', stat: 'wins', color: 'text-[#34d399]', top: [...pitchingStats].sort((a,b) => b.wins-a.wins).slice(0,3),                                                              display: (p: typeof pitchingStats[0]) => String(p.wins) },
+          ] as const).map(({ title, stat, color, top, display }) => (
+            <div key={title} className="glass-card rounded-xl p-4">
+              <Link
+                href={`/stats/ranking?stat=${stat}${rankYearParam ? `&year=${rankYearParam}` : ''}`}
+                className="flex items-center justify-between text-xs font-bold text-[#64748b] tracking-wider mb-3 hover:text-[#a78bfa] transition-colors group"
+              >
+                <span>{title}ランキング</span>
+                <span className="text-[#475569] group-hover:text-[#a78bfa]">全順位 ›</span>
+              </Link>
+              {top.length === 0 ? <div className="text-xs text-[#475569]">—</div> : top.map((p, i) => (
+                <div key={p.id} className="flex items-center justify-between py-1 border-b border-[#0f2035]/50 last:border-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`text-xs font-black w-4 ${i===0?'text-[#fbbf24]':'text-[#475569]'}`}>{i+1}</span>
+                    <Link href={`/members/${p.id}`} className="text-xs text-[#94a3b8] hover:text-[#e2e8f0] truncate transition-colors">{p.name}</Link>
+                  </div>
+                  <span className={`text-sm font-black ${color} ml-2`}>{display(p)}</span>
+                </div>
+              ))}
             </div>
           ))}
         </div>
@@ -360,10 +450,21 @@ export default async function StatsPage({
           )}
 
           {/* ── 投手成績 ── */}
-          {pitchingStats.length > 0 && (
-            <div className="mb-10">
-              <h2 className="text-xs font-bold tracking-[0.3em] text-[#a78bfa] uppercase mb-4">投手成績</h2>
-              <div className="glass-card rounded-2xl overflow-hidden">
+          {pitchingStats.length > 0 && (() => {
+            const ipThresholdOuts = Math.floor(totalGames * qualIpPerGame) * 3
+            const qualifiedP   = pitchingStats.filter(p => p.outs >= ipThresholdOuts)
+            const notQualifiedP = pitchingStats.filter(p => p.outs < ipThresholdOuts)
+            const showIpSplit   = qualifiedP.length > 0 && notQualifiedP.length > 0
+
+            const pitchingSections: { label: string; players: typeof pitchingStats; muted: boolean }[] = showIpSplit
+              ? [
+                  { label: `規定投球回到達者（${Math.floor(totalGames * qualIpPerGame)}回以上）`, players: qualifiedP, muted: false },
+                  { label: '規定投球回未到達者', players: notQualifiedP, muted: true },
+                ]
+              : [{ label: '', players: pitchingStats, muted: false }]
+
+            const PitcherTable = ({ players, muted }: { players: typeof pitchingStats; muted: boolean }) => (
+              <div className={`glass-card rounded-2xl overflow-hidden ${muted ? 'opacity-60' : ''}`}>
                 <p className="text-[10px] text-[#475569] pt-3 px-4 sm:hidden">← 横スクロールで全成績を確認</p>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm min-w-[320px]">
@@ -385,11 +486,11 @@ export default async function StatsPage({
                       </tr>
                     </thead>
                     <tbody>
-                      {pitchingStats.map((p, i) => (
+                      {players.map((p, i) => (
                         <tr
                           key={p.id}
                           className={`border-b border-[#0d1b2a] hover:bg-[#0d1b2a]/50 transition-colors ${
-                            i === 0 ? 'bg-[#1a1a44]/30' : ''
+                            i === 0 && !muted ? 'bg-[#1a1a44]/30' : ''
                           }`}
                         >
                           <td className="px-4 py-3">
@@ -445,13 +546,65 @@ export default async function StatsPage({
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                    </table>
+                  </div>
                 </div>
+              )
+
+            return (
+              <div className="mb-10">
+                <h2 className="text-xs font-bold tracking-[0.3em] text-[#a78bfa] uppercase mb-1">投手成績</h2>
+                {pitchingSections.map(({ label, players, muted }) => (
+                  <div key={label} className="mb-4">
+                    {label && (
+                      <p className="text-[10px] text-[#475569] mb-2">{label}</p>
+                    )}
+                    <PitcherTable players={players} muted={muted} />
+                  </div>
+                ))}
               </div>
-            </div>
-          )}
+            )
+          })()}
         </>
       )}
+
+      {/* 出場試合数ランキング */}
+      {streakRanking.length > 0 && (
+        <div className="glass-card rounded-2xl p-5 mt-6">
+          <h2 className="text-xs font-bold tracking-[0.3em] text-[#fbbf24] uppercase mb-4">
+            ⚾ 出場試合数ランキング
+          </h2>
+          <div className="flex flex-col gap-1.5">
+            {streakRanking.map((p, i) => {
+              const pct = streakRanking[0].total > 0 ? p.total / streakRanking[0].total * 100 : 0
+              const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : null
+              return (
+                <a key={p.id} href={`/members/${p.id}`}
+                  className="relative flex items-center gap-3 px-4 py-2.5 rounded-xl border border-[#1e3a5f] hover:border-[#2a4a6f] transition-all overflow-hidden group">
+                  <div className="absolute inset-0 bg-[#fbbf24]/5" style={{ width: `${pct}%` }}/>
+                  <div className="relative flex items-center gap-3 w-full">
+                    <span className="w-6 text-center text-sm shrink-0">
+                      {medal ?? <span className="text-xs text-[#475569]">{i + 1}</span>}
+                    </span>
+                    <span className="flex-1 text-sm text-[#e2e8f0] font-medium group-hover:text-[#60a5fa] transition-colors">
+                      {p.name}
+                      {p.number != null && <span className="text-xs text-[#475569] ml-1.5">#{p.number}</span>}
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="text-lg font-black text-[#fbbf24]">{p.total}</span>
+                      <span className="text-xs text-[#64748b] ml-1">試合</span>
+                      <span className={`text-xs ml-2 ${p.rate >= 80 ? 'text-[#22c55e]' : p.rate >= 50 ? 'text-[#94a3b8]' : 'text-[#475569]'}`}>
+                        ({p.rate}%)
+                      </span>
+                    </span>
+                  </div>
+                </a>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }

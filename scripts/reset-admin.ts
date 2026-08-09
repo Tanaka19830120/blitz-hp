@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs'
 import 'dotenv/config'
 
 const adapter = new PrismaLibSql({
-  url: process.env.DATABASE_URL ?? 'file:./dev.db',
+  url: process.env.DATABASE_DIRECT_URL ?? process.env.DATABASE_URL ?? 'file:./dev.db',
   authToken: process.env.DATABASE_AUTH_TOKEN,
 })
 const prisma = new PrismaClient({ adapter } as ConstructorParameters<typeof PrismaClient>[0])

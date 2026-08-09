@@ -14,11 +14,26 @@ export async function POST(request: Request) {
     for (const event of events as Record<string, unknown>[]) {
       const source = event.source as Record<string, string> | undefined
       if (source?.type === 'group' && source?.groupId) {
-        await prisma.setting.upsert({
-          where:  { key: 'detectedLineGroupId' },
-          create: { key: 'detectedLineGroupId', value: source.groupId },
-          update: { value: source.groupId },
-        })
+        const groupId = source.groupId
+
+        // テキストメッセージのキーワード判定
+        const msgText: string = (event.message as Record<string, string> | undefined)?.text?.trim() ?? ''
+
+        if (msgText === '管理者登録') {
+          // このグループを管理者専用グループとして登録
+          await prisma.setting.upsert({
+            where:  { key: 'adminLineGroupId' },
+            create: { key: 'adminLineGroupId', value: groupId },
+            update: { value: groupId },
+          })
+        } else {
+          // それ以外はチーム全体グループとして記録
+          await prisma.setting.upsert({
+            where:  { key: 'detectedLineGroupId' },
+            create: { key: 'detectedLineGroupId', value: groupId },
+            update: { value: groupId },
+          })
+        }
       }
     }
   } catch {

@@ -46,12 +46,12 @@ interface Props {
   savePhotoAction: (scheduleId: string, photoUrl: string) => Promise<void>
   sendLineAction:  (scheduleId: string, json: string) => Promise<void>
   lineConfigured:  boolean
-  scheduleInfo?:   { date: string; opponent: string }
+  scheduleInfo?:   { id: string; date: string; opponent: string }
 }
 
 // LINE 送信プレビュー（クライアント側で生成）
 function buildLinePreview(
-  scheduleInfo: { date: string; opponent: string },
+  scheduleInfo: { id: string; date: string; opponent: string },
   ourScore: string,
   opponentScore: string,
   note: string,
@@ -73,6 +73,7 @@ function buildLinePreview(
     `${dateStr} vs ${scheduleInfo.opponent}`,
     `━━━━━━━━━━━━`,
     `BLITZ ${our} ー ${opp} ${scheduleInfo.opponent}`,
+    `https://blitz-hp.vercel.app/results/${scheduleInfo.id}`,
     ``,
     emoji,
     note ? `\n${note}` : null,
@@ -217,7 +218,7 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
   const ourRbiTotal = ourScoreTotal
 
   // 先攻・後攻の表示順入れ替え（true なら相手チームを上に表示）
-  const [oppFirst, setOppFirst] = useState(false)
+  const [oppFirst, setOppFirst] = useState(initialData?.oppFirst ?? false)
 
   // ── LINE 確認モーダル ──
   const [showLineModal, setShowLineModal] = useState(false)
@@ -650,6 +651,7 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
         opponent: Array.from({ length: innings }, (_, i) => opponentInnings[i] ?? null),
       },
       note,
+      oppFirst,
     }
   }
 

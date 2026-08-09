@@ -41,7 +41,7 @@ export default async function AlbumListPage() {
   const session = await auth()
   if (!session?.user) {
     return (
-      <div className="pt-16 max-w-3xl mx-auto px-4 py-20 text-center">
+      <div className="max-w-3xl mx-auto px-4 py-20 text-center">
         <h1 className="text-2xl font-black text-[#e2e8f0] mb-3">📷 写真</h1>
         <p className="text-[#64748b] mb-6">写真の閲覧・投稿はメンバー専用です。ログインしてください。</p>
         <Link href="/login" className="btn-primary">ログイン</Link>
@@ -61,7 +61,7 @@ export default async function AlbumListPage() {
   const today = new Date().toISOString().slice(0, 10)
 
   return (
-    <div className="pt-16 max-w-5xl mx-auto px-4 py-12">
+    <div className="max-w-5xl mx-auto px-4 py-12">
       <div className="mb-8">
         <h1 className="text-3xl font-black text-[#e2e8f0] mb-2">📷 写真</h1>
         <p className="text-[#64748b]">試合・イベントの写真（メンバー専用）</p>

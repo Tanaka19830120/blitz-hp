@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { sendToAdminLineGroup } from '@/lib/line'
 
 const TYPE_LABELS: Record<string, string> = {
   trial: '体験参加について',
@@ -27,6 +28,16 @@ export async function POST(req: Request) {
 
   try {
     await prisma.inquiry.create({ data: { name, email, type, message } })
+
+    // LINEグループに通知（失敗してもエラーにしない）
+    await sendToAdminLineGroup(
+      `📩 お問い合わせが届きました\n\n` +
+      `【種別】${type}\n` +
+      `【名前】${name}\n` +
+      `【メール】${email}\n` +
+      `【内容】${message}\n\n` +
+      `https://blitz-hp.vercel.app/admin/contact`
+    ).catch(() => {})
   } catch (e) {
     return NextResponse.json(
       { error: '送信に失敗しました。時間をおいて再度お試しください。', details: e instanceof Error ? e.message : String(e) },

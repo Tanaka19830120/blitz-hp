@@ -30,12 +30,16 @@ function yearFilter(year?: number) {
   return { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31T23:59:59`) }
 }
 
-/** 打撃成績を取得（year 未指定なら通算）。打率降順でソート。 */
-export async function getBattingStats(year?: number): Promise<PlayerStats[]> {
+/** 打撃成績を取得（year 未指定なら通算）。打率降順でソート。
+ *  includeAlumni=true のとき元メンバーも含む（歴代モード）
+ */
+export async function getBattingStats(year?: number, includeAlumni = false): Promise<PlayerStats[]> {
   const dateFilter = yearFilter(year)
 
   const players = await prisma.user.findMany({
-    where: { isGuest: false },
+    where: includeAlumni
+      ? { isGuest: false }
+      : { isGuest: false, email: { endsWith: '@b' } },
     include: {
       gameStats: {
         include: { game: { include: { schedule: { select: { date: true } } } } },
@@ -96,6 +100,58 @@ export async function getBattingStats(year?: number): Promise<PlayerStats[]> {
     })
 }
 
+export type TrendStat = 'avg' | 'hits' | 'rbi' | 'homeRuns'
+
+/** 全選手の試合別累積成績を日付順で返す（グラフ用） */
+export async function getPlayerTrends(
+  playerIds: string[],
+  year?: number,
+  stat: TrendStat = 'avg',
+  includeAlumni = false,
+): Promise<{ id: string; name: string; number: number | null; points: { date: string; value: number }[] }[]> {
+  if (playerIds.length === 0) return []
+  const dateFilter = year
+    ? { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31T23:59:59`) }
+    : undefined
+
+  const players = await prisma.user.findMany({
+    where: {
+      id: { in: playerIds },
+      ...(includeAlumni ? { isGuest: false } : { isGuest: false, email: { endsWith: '@b' } }),
+    },
+    select: {
+      id: true, name: true, number: true,
+      gameStats: {
+        where: dateFilter ? { game: { schedule: { date: dateFilter } } } : {},
+        include: { game: { include: { schedule: { select: { date: true } } } } },
+        orderBy: { game: { schedule: { date: 'asc' } } },
+      },
+    },
+  })
+
+  return players.map(p => {
+    let cumAb = 0, cumH = 0, cumVal = 0
+
+    // 同じ日の複数試合を累積して、その日の最終値だけを1点として使う
+    const byDate = new Map<string, number>()
+    for (const gs of p.gameStats) {
+      const date = new Date(gs.game.schedule.date).toISOString().slice(0, 10)
+      cumAb += gs.atBats
+      cumH  += gs.hits
+      if      (stat === 'avg')      cumVal = cumAb > 0 ? cumH / cumAb : 0
+      else if (stat === 'hits')     cumVal += gs.hits
+      else if (stat === 'rbi')      cumVal += gs.rbi
+      else if (stat === 'homeRuns') cumVal += gs.homeRuns
+      byDate.set(date, cumVal)  // 同じ日は上書き → その日の最終値のみ残る
+    }
+
+    const points: { date: string; value: number; dashed?: boolean }[] =
+      [...byDate.entries()].map(([date, value]) => ({ date, value }))
+
+    return { id: p.id, name: p.name, number: p.number, points }
+  }).filter(p => p.points.length >= 2)
+}
+
 /** 成績データが存在する年度の一覧（降順） */
 export async function getAvailableYears(): Promise<number[]> {
   const schedules = await prisma.schedule.findMany({
@@ -123,5 +179,16 @@ export async function getQualPaPerGame(): Promise<number> {
     return isNaN(v) || v <= 0 ? 2.0 : v
   } catch {
     return 2.0
+  }
+}
+
+/** 1試合あたりの規定投球回（設定値・デフォルト1.0） */
+export async function getQualIpPerGame(): Promise<number> {
+  try {
+    const s = await prisma.setting.findUnique({ where: { key: 'qualIpPerGame' } })
+    const v = s ? parseFloat(s.value) : NaN
+    return isNaN(v) || v <= 0 ? 1.0 : v
+  } catch {
+    return 1.0
   }
 }

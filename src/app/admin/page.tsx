@@ -128,7 +128,7 @@ export default async function AdminPage() {
   const recentSchedules = groups.slice(0, 8)
 
   return (
-    <div className="pt-16 max-w-7xl mx-auto px-4 py-12">
+    <div className="max-w-7xl mx-auto px-4 py-12">
       <div className="mb-8">
         <h1 className="text-3xl font-black text-[#e2e8f0] mb-2">管理ダッシュボード</h1>
         <p className="text-[#64748b]">チームデータの管理</p>
@@ -206,6 +206,13 @@ export default async function AdminPage() {
             <div>
               <div className="font-semibold text-[#e2e8f0]">チームプロフィール</div>
               <div className="text-xs text-[#64748b]">チーム紹介ページの編集</div>
+            </div>
+          </Link>
+          <Link href="/admin/links" className="glass-card rounded-xl p-5 hover:border-[#2563eb]/40 transition-all flex items-center gap-4">
+            <div className="w-10 h-10 rounded-lg bg-[#0891b2]/20 flex items-center justify-center text-[#22d3ee] text-xl">🔗</div>
+            <div>
+              <div className="font-semibold text-[#e2e8f0]">リンク集管理</div>
+              <div className="text-xs text-[#64748b]">外部リンクの追加・編集・削除</div>
             </div>
           </Link>
           <Link href="/admin/contact" className="glass-card rounded-xl p-5 hover:border-[#2563eb]/40 transition-all flex items-center gap-4">
