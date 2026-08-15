@@ -19,17 +19,18 @@ const STATUS_CONFIRM: Record<Status, string> = {
 interface Props {
   scheduleId:    string
   currentStatus: Status | null
+  currentNote:   string
   isMulti:       boolean
-  updateAction:  (scheduleId: string, status: Status) => Promise<void>
+  updateAction:  (scheduleId: string, status: Status, note: string) => Promise<void>
 }
 
-export default function AttendanceButtons({ scheduleId, currentStatus, isMulti, updateAction }: Props) {
+export default function AttendanceButtons({ scheduleId, currentStatus, currentNote, isMulti, updateAction }: Props) {
   const [pending, startTransition] = useTransition()
   const [confirm, setConfirm] = useState<Status | null>(null)
+  const [note, setNote] = useState(currentNote)
 
   function handleClick(status: Status) {
-    // 既に同じステータスなら何もしない
-    if (status === currentStatus) return
+    setNote(currentNote)
     setConfirm(status)
   }
 
@@ -38,7 +39,7 @@ export default function AttendanceButtons({ scheduleId, currentStatus, isMulti, 
     const status = confirm
     setConfirm(null)
     startTransition(async () => {
-      await updateAction(scheduleId, status)
+      await updateAction(scheduleId, status, note)
     })
   }
 
@@ -100,6 +101,20 @@ export default function AttendanceButtons({ scheduleId, currentStatus, isMulti, 
               }
               {isMulti && <span className="block mt-1 text-[#64748b] text-xs">※ 同日の全試合に適用されます</span>}
             </p>
+            <label className="block mb-4">
+              <span className="block text-sm font-medium text-[#cbd5e1] mb-1.5">
+                コメント <span className="text-[#64748b] font-normal">（任意）</span>
+              </span>
+              <textarea
+                value={note}
+                onChange={(event) => setNote(event.target.value.slice(0, 200))}
+                maxLength={200}
+                rows={3}
+                placeholder="例：助っ人を1人連れていきます／30分遅れます"
+                className="w-full resize-none rounded-lg border border-[#1e3a5f] bg-[#091827] px-3 py-2 text-sm text-[#e2e8f0] placeholder:text-[#475569] outline-none transition-colors focus:border-[#2563eb]"
+              />
+              <span className="mt-1 block text-right text-xs text-[#475569]">{note.length}/200</span>
+            </label>
             <div className="flex gap-3">
               <button
                 onClick={() => setConfirm(null)}

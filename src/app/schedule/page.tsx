@@ -7,7 +7,11 @@ import { mapsUrl } from '@/lib/maps'
 import AttendanceButtons from '@/components/AttendanceButtons'
 import { PastSchedulesCollapse } from '@/components/PastSchedulesCollapse'
 
-async function updateAttendance(scheduleId: string, status: 'ATTENDING' | 'ABSENT' | 'MAYBE') {
+async function updateAttendance(
+  scheduleId: string,
+  status: 'ATTENDING' | 'ABSENT' | 'MAYBE',
+  note: string,
+) {
   'use server'
   const session = await auth()
   if (!session?.user?.id) return
@@ -25,12 +29,14 @@ async function updateAttendance(scheduleId: string, status: 'ATTENDING' | 'ABSEN
     scheduleIds = grouped.map(s => s.id)
   }
 
+  const normalizedNote = note.trim().slice(0, 200) || null
+
   await Promise.all(
     scheduleIds.map(sid =>
       prisma.attendance.upsert({
         where:  { userId_scheduleId: { userId: session.user!.id!, scheduleId: sid } },
-        create: { userId: session.user!.id!, scheduleId: sid, status },
-        update: { status },
+        create: { userId: session.user!.id!, scheduleId: sid, status, note: normalizedNote },
+        update: { status, note: normalizedNote },
       })
     )
   )
@@ -52,7 +58,7 @@ function statusLabel(status: string) {
 }
 
 type ScheduleRow = Awaited<ReturnType<typeof prisma.schedule.findMany>>[number] & {
-  attendances: { userId: string; status: string; user: { id: string; name: string } }[]
+  attendances: { userId: string; status: string; note: string | null; user: { id: string; name: string } }[]
 }
 
 /** 日程リストを dayGroupId でグループ化。グループなし = 1要素の配列 */
@@ -205,6 +211,7 @@ export default async function SchedulePage() {
                         <AttendanceButtons
                           scheduleId={primary.id}
                           currentStatus={(myAttendance?.status as 'ATTENDING' | 'ABSENT' | 'MAYBE' | null) ?? null}
+                          currentNote={myAttendance?.note ?? ''}
                           isMulti={isMulti}
                           updateAction={updateAttendance}
                         />
@@ -219,7 +226,12 @@ export default async function SchedulePage() {
                     <span className="text-[#22c55e] font-bold">✓ 参加 {attending.length}名</span>
                     {attending.length > 0 && (
                       <div className="mt-1 text-[#64748b] leading-relaxed">
-                        {attending.map(a => a.user.name).join('・')}
+                        {attending.map(a => (
+                          <div key={a.userId}>
+                            {a.user.name}
+                            {a.note && <span className="block pl-2 text-[#94a3b8]">↳ {a.note}</span>}
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -227,7 +239,12 @@ export default async function SchedulePage() {
                     <span className="text-[#ef4444] font-bold">✗ 欠席 {absent.length}名</span>
                     {absent.length > 0 && (
                       <div className="mt-1 text-[#64748b] leading-relaxed">
-                        {absent.map(a => a.user.name).join('・')}
+                        {absent.map(a => (
+                          <div key={a.userId}>
+                            {a.user.name}
+                            {a.note && <span className="block pl-2 text-[#94a3b8]">↳ {a.note}</span>}
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -235,7 +252,12 @@ export default async function SchedulePage() {
                     <span className="text-[#f59e0b] font-bold">? 未定 {maybe.length}名</span>
                     {maybe.length > 0 && (
                       <div className="mt-1 text-[#64748b] leading-relaxed">
-                        {maybe.map(a => a.user.name).join('・')}
+                        {maybe.map(a => (
+                          <div key={a.userId}>
+                            {a.user.name}
+                            {a.note && <span className="block pl-2 text-[#94a3b8]">↳ {a.note}</span>}
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
