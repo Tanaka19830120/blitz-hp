@@ -78,6 +78,7 @@ model Attendance {
   id         String           @id @default(cuid())
   status     AttendanceStatus @default(PENDING)
   note       String?
+  guestCount Int              @default(0) // この登録者が連れてくる助っ人数
   createdAt  DateTime         @default(now())
   userId     String
   scheduleId String

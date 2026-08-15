@@ -222,7 +222,7 @@ export function buildReminder(schedules: {
  */
 export function buildAttendanceSummary(
   schedule: { date: Date; opponent: string } | { date: Date; opponent: string }[],
-  attendances: { status: string; userId: string; user: { name: string } }[],
+  attendances: { status: string; userId: string; guestCount: number; user: { name: string } }[],
   members?: { id: string; name: string }[]
 ): string {
   // 複数試合の場合 opponent を結合
@@ -230,7 +230,13 @@ export function buildAttendanceSummary(
   const opponentLabel = Array.isArray(schedule)
     ? schedule.map((s, i) => `第${i + 1}試合 vs ${s.opponent}`).join(' / ')
     : `vs ${schedule.opponent}`
-  const attending = attendances.filter(a => a.status === 'ATTENDING').map(a => a.user.name)
+  const attendingRows = attendances.filter(a => a.status === 'ATTENDING')
+  const attending = attendingRows.map(a => a.user.name)
+  const guests = attendingRows.flatMap(a =>
+    Array.from({ length: a.guestCount }, () => a.user.name)
+  )
+  const guestLabels = guests.map((ownerName, index) => `助っ人${index + 1}（${ownerName}）`)
+  const allAttending = [...attending, ...guestLabels]
   const absent    = attendances.filter(a => a.status === 'ABSENT').map(a => a.user.name)
   const maybe     = attendances.filter(a => a.status === 'MAYBE').map(a => a.user.name)
 
@@ -246,8 +252,8 @@ export function buildAttendanceSummary(
     `📋【BLITZ】出欠状況`,
     `${fmt(primary.date)} ${opponentLabel}`,
     `━━━━━━━━━━━━`,
-    `✅ 参加 ${attending.length}名`,
-    attending.length > 0 ? attending.join('、') : '（なし）',
+    `✅ 参加 ${allAttending.length}名${guests.length > 0 ? `（助っ人${guests.length}名）` : ''}`,
+    allAttending.length > 0 ? allAttending.join('、') : '（なし）',
     absent.length > 0    ? `\n❌ 欠席 ${absent.length}名\n${absent.join('、')}` : null,
     maybe.length > 0     ? `\n🤔 未定 ${maybe.length}名\n${maybe.join('、')}` : null,
     pending.length > 0   ? `\n⏳ 未回答 ${pending.length}名\n${pending.join('、')}` : null,

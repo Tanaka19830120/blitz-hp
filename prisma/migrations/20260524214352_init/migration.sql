@@ -30,6 +30,7 @@ CREATE TABLE "Attendance" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "status" TEXT NOT NULL DEFAULT 'PENDING',
     "note" TEXT,
+    "guestCount" INTEGER NOT NULL DEFAULT 0,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "userId" TEXT NOT NULL,
     "scheduleId" TEXT NOT NULL,

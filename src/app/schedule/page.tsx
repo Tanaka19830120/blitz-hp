@@ -11,6 +11,7 @@ async function updateAttendance(
   scheduleId: string,
   status: 'ATTENDING' | 'ABSENT' | 'MAYBE',
   note: string,
+  guestCount: number,
 ) {
   'use server'
   const session = await auth()
@@ -30,13 +31,19 @@ async function updateAttendance(
   }
 
   const normalizedNote = note.trim().slice(0, 200) || null
+  const normalizedGuestCount = status === 'ATTENDING'
+    ? Math.max(0, Math.min(20, Math.trunc(guestCount)))
+    : 0
 
   await Promise.all(
     scheduleIds.map(sid =>
       prisma.attendance.upsert({
         where:  { userId_scheduleId: { userId: session.user!.id!, scheduleId: sid } },
-        create: { userId: session.user!.id!, scheduleId: sid, status, note: normalizedNote },
-        update: { status, note: normalizedNote },
+        create: {
+          userId: session.user!.id!, scheduleId: sid, status,
+          note: normalizedNote, guestCount: normalizedGuestCount,
+        },
+        update: { status, note: normalizedNote, guestCount: normalizedGuestCount },
       })
     )
   )
@@ -58,7 +65,13 @@ function statusLabel(status: string) {
 }
 
 type ScheduleRow = Awaited<ReturnType<typeof prisma.schedule.findMany>>[number] & {
-  attendances: { userId: string; status: string; note: string | null; user: { id: string; name: string } }[]
+  attendances: {
+    userId: string
+    status: string
+    note: string | null
+    guestCount: number
+    user: { id: string; name: string }
+  }[]
 }
 
 /** 日程リストを dayGroupId でグループ化。グループなし = 1要素の配列 */
@@ -117,6 +130,13 @@ export default async function SchedulePage() {
             const attending = primary.attendances.filter(a => a.status === 'ATTENDING')
             const absent    = primary.attendances.filter(a => a.status === 'ABSENT')
             const maybe     = primary.attendances.filter(a => a.status === 'MAYBE')
+            const guests = attending.flatMap(a =>
+              Array.from({ length: a.guestCount }, (_, index) => ({
+                key: `${a.userId}-${index}`,
+                ownerName: a.user.name,
+              }))
+            )
+            const totalAttending = attending.length + guests.length
             // 未回答 = 現メンバーのうち、回答(参加/欠席/未定)していない人
             const respondedIds = new Set(
               primary.attendances
@@ -212,6 +232,7 @@ export default async function SchedulePage() {
                           scheduleId={primary.id}
                           currentStatus={(myAttendance?.status as 'ATTENDING' | 'ABSENT' | 'MAYBE' | null) ?? null}
                           currentNote={myAttendance?.note ?? ''}
+                          currentGuestCount={myAttendance?.guestCount ?? 0}
                           isMulti={isMulti}
                           updateAction={updateAttendance}
                         />
@@ -223,13 +244,21 @@ export default async function SchedulePage() {
                 {/* 出欠集計 */}
                 <div className="mt-4 pt-4 border-t border-[#1e3a5f]/30 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
                   <div>
-                    <span className="text-[#22c55e] font-bold">✓ 参加 {attending.length}名</span>
+                    <span className="text-[#22c55e] font-bold">
+                      ✓ 参加 {totalAttending}名
+                      {guests.length > 0 && <span className="text-[#64748b] font-normal">（助っ人{guests.length}名）</span>}
+                    </span>
                     {attending.length > 0 && (
                       <div className="mt-1 text-[#64748b] leading-relaxed">
                         {attending.map(a => (
                           <div key={a.userId}>
                             {a.user.name}
                             {a.note && <span className="block pl-2 text-[#94a3b8]">↳ {a.note}</span>}
+                          </div>
+                        ))}
+                        {guests.map((guest, index) => (
+                          <div key={guest.key} className="text-[#60a5fa]">
+                            助っ人{index + 1}（{guest.ownerName}）
                           </div>
                         ))}
                       </div>

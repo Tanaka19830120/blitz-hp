@@ -37,6 +37,9 @@ async function main() {
   // v13: 個人ページテーマカラー
   await safeAddColumn('User', 'themeColor', 'TEXT')
 
+  // v15: 出欠登録者が連れてくる助っ人数
+  await safeAddColumn('Attendance', 'guestCount', 'INTEGER NOT NULL DEFAULT 0')
+
   // v14: リンク集
   await client.execute(`
     CREATE TABLE IF NOT EXISTS "Link" (

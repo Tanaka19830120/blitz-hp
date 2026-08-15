@@ -20,17 +20,22 @@ interface Props {
   scheduleId:    string
   currentStatus: Status | null
   currentNote:   string
+  currentGuestCount: number
   isMulti:       boolean
-  updateAction:  (scheduleId: string, status: Status, note: string) => Promise<void>
+  updateAction:  (scheduleId: string, status: Status, note: string, guestCount: number) => Promise<void>
 }
 
-export default function AttendanceButtons({ scheduleId, currentStatus, currentNote, isMulti, updateAction }: Props) {
+export default function AttendanceButtons({
+  scheduleId, currentStatus, currentNote, currentGuestCount, isMulti, updateAction,
+}: Props) {
   const [pending, startTransition] = useTransition()
   const [confirm, setConfirm] = useState<Status | null>(null)
   const [note, setNote] = useState(currentNote)
+  const [guestCount, setGuestCount] = useState(currentGuestCount)
 
   function handleClick(status: Status) {
     setNote(currentNote)
+    setGuestCount(status === 'ATTENDING' ? currentGuestCount : 0)
     setConfirm(status)
   }
 
@@ -39,7 +44,7 @@ export default function AttendanceButtons({ scheduleId, currentStatus, currentNo
     const status = confirm
     setConfirm(null)
     startTransition(async () => {
-      await updateAction(scheduleId, status, note)
+      await updateAction(scheduleId, status, note, status === 'ATTENDING' ? guestCount : 0)
     })
   }
 
@@ -101,6 +106,48 @@ export default function AttendanceButtons({ scheduleId, currentStatus, currentNo
               }
               {isMulti && <span className="block mt-1 text-[#64748b] text-xs">※ 同日の全試合に適用されます</span>}
             </p>
+            {confirm === 'ATTENDING' && (
+              <div className="mb-4">
+                <span className="block text-sm font-medium text-[#cbd5e1] mb-1.5">
+                  連れていく助っ人数 <span className="text-[#64748b] font-normal">（任意）</span>
+                </span>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setGuestCount(count => Math.max(0, count - 1))}
+                    disabled={guestCount === 0}
+                    aria-label="助っ人数を1人減らす"
+                    className="h-10 w-10 rounded-lg border border-[#1e3a5f] text-xl text-[#94a3b8] disabled:opacity-30 hover:border-[#2563eb]">
+                    −
+                  </button>
+                  <input
+                    type="number"
+                    min={0}
+                    max={20}
+                    value={guestCount}
+                    onChange={(event) => {
+                      const value = Number.parseInt(event.target.value, 10)
+                      setGuestCount(Number.isNaN(value) ? 0 : Math.max(0, Math.min(20, value)))
+                    }}
+                    className="h-10 w-20 rounded-lg border border-[#1e3a5f] bg-[#091827] text-center text-[#e2e8f0] outline-none focus:border-[#2563eb]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setGuestCount(count => Math.min(20, count + 1))}
+                    disabled={guestCount === 20}
+                    aria-label="助っ人数を1人増やす"
+                    className="h-10 w-10 rounded-lg border border-[#1e3a5f] text-xl text-[#94a3b8] disabled:opacity-30 hover:border-[#2563eb]">
+                    ＋
+                  </button>
+                  <span className="text-sm text-[#64748b]">人</span>
+                </div>
+                {guestCount > 0 && (
+                  <p className="mt-1.5 text-xs text-[#60a5fa]">
+                    助っ人は「助っ人1（あなたの名前）」の形式で参加者一覧に表示されます
+                  </p>
+                )}
+              </div>
+            )}
             <label className="block mb-4">
               <span className="block text-sm font-medium text-[#cbd5e1] mb-1.5">
                 コメント <span className="text-[#64748b] font-normal">（任意）</span>
