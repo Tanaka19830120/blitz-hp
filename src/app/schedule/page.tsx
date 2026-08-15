@@ -117,6 +117,23 @@ function statusLabel(status: string) {
   return { label: '未回答', cls: 'badge-pending' }
 }
 
+function textWithLinks(text: string) {
+  const urlPattern = /(https?:\/\/[^\s<>"'）)\]】、。]+)/g
+
+  return text.split(urlPattern).map((part, index) =>
+    /^https?:\/\//.test(part) ? (
+      <a
+        key={`${part}-${index}`}
+        href={part}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-[#60a5fa] underline decoration-[#2563eb]/50 underline-offset-2 hover:text-[#93c5fd] break-all">
+        {part}
+      </a>
+    ) : part
+  )
+}
+
 type ScheduleRow = Awaited<ReturnType<typeof prisma.schedule.findMany>>[number] & {
   attendances: {
     userId: string
@@ -269,7 +286,7 @@ export default async function SchedulePage() {
 
                     {primary.note && (
                       <p className="mt-2 text-sm text-[#94a3b8] bg-[#0d1b2a] rounded-lg px-3 py-2 whitespace-pre-line">
-                        {primary.note}
+                        {textWithLinks(primary.note)}
                       </p>
                     )}
                   </div>
