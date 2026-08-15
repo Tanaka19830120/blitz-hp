@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { getGameTypeLabels } from '@/lib/settings'
 import { mapsUrl } from '@/lib/maps'
 import AttendanceButtons from '@/components/AttendanceButtons'
+import AdminAttendanceEditor from '@/components/AdminAttendanceEditor'
 import { PastSchedulesCollapse } from '@/components/PastSchedulesCollapse'
 
 async function updateAttendance(
@@ -51,6 +52,58 @@ async function updateAttendance(
   redirect(`/schedule?toast=${encodeURIComponent('出欠を登録しました')}`)
 }
 
+async function updateAttendanceAsAdmin(
+  scheduleId: string,
+  targetUserId: string,
+  status: 'ATTENDING' | 'ABSENT' | 'MAYBE',
+  note: string,
+  guestCount: number,
+) {
+  'use server'
+  const session = await auth()
+  if (!session?.user?.id || session.user.role !== 'ADMIN') return
+
+  const [schedule, targetUser] = await Promise.all([
+    prisma.schedule.findUnique({ where: { id: scheduleId } }),
+    prisma.user.findFirst({
+      where: { id: targetUserId, isGuest: false, email: { endsWith: '@b' } },
+      select: { id: true, name: true },
+    }),
+  ])
+  if (!schedule || !targetUser) return
+
+  let scheduleIds = [scheduleId]
+  if (schedule.dayGroupId) {
+    const grouped = await prisma.schedule.findMany({
+      where: { dayGroupId: schedule.dayGroupId },
+      select: { id: true },
+    })
+    scheduleIds = grouped.map(item => item.id)
+  }
+
+  const normalizedNote = note.trim().slice(0, 200) || null
+  const normalizedGuestCount = status === 'ATTENDING'
+    ? Math.max(0, Math.min(20, Math.trunc(guestCount)))
+    : 0
+
+  await prisma.$transaction(
+    scheduleIds.map(id => prisma.attendance.upsert({
+      where: { userId_scheduleId: { userId: targetUser.id, scheduleId: id } },
+      create: {
+        userId: targetUser.id,
+        scheduleId: id,
+        status,
+        note: normalizedNote,
+        guestCount: normalizedGuestCount,
+      },
+      update: { status, note: normalizedNote, guestCount: normalizedGuestCount },
+    }))
+  )
+
+  revalidatePath('/schedule')
+  redirect(`/schedule?toast=${encodeURIComponent(`${targetUser.name}さんの出欠を登録しました`)}`)
+}
+
 function formatDate(date: Date) {
   return new Date(date).toLocaleDateString('ja-JP', {
     year: 'numeric', month: 'long', day: 'numeric', weekday: 'short',
@@ -93,6 +146,7 @@ function groupSchedules(schedules: ScheduleRow[]) {
 
 export default async function SchedulePage() {
   const session = await auth()
+  const isAdmin = session?.user?.role === 'ADMIN'
   const now = new Date()
 
   const [rawSchedules, gameTypeLabels, members] = await Promise.all([
@@ -240,6 +294,26 @@ export default async function SchedulePage() {
                     )}
                   </div>
                 </div>
+
+                {isAdmin && !isPast && (
+                  <AdminAttendanceEditor
+                    scheduleId={primary.id}
+                    isMulti={isMulti}
+                    members={members
+                      .filter(member => member.id !== session.user.id)
+                      .map(member => {
+                        const attendance = primary.attendances.find(item => item.userId === member.id)
+                        return {
+                          id: member.id,
+                          name: member.name,
+                          status: (attendance?.status as 'ATTENDING' | 'ABSENT' | 'MAYBE' | null) ?? null,
+                          note: attendance?.note ?? '',
+                          guestCount: attendance?.guestCount ?? 0,
+                        }
+                      })}
+                    updateAction={updateAttendanceAsAdmin}
+                  />
+                )}
 
                 {/* 出欠集計 */}
                 <div className="mt-4 pt-4 border-t border-[#1e3a5f]/30 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
