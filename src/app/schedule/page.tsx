@@ -6,6 +6,7 @@ import { getGameTypeLabels } from '@/lib/settings'
 import { mapsUrl } from '@/lib/maps'
 import AttendanceButtons from '@/components/AttendanceButtons'
 import AdminAttendanceEditor from '@/components/AdminAttendanceEditor'
+import { MemberAvatar } from '@/components/MemberAvatar'
 import { PastSchedulesCollapse } from '@/components/PastSchedulesCollapse'
 
 async function updateAttendance(
@@ -140,7 +141,7 @@ type ScheduleRow = Awaited<ReturnType<typeof prisma.schedule.findMany>>[number] 
     status: string
     note: string | null
     guestCount: number
-    user: { id: string; name: string }
+    user: { id: string; name: string; number: number | null; photoUrl: string | null }
   }[]
 }
 
@@ -171,7 +172,7 @@ export default async function SchedulePage() {
       orderBy: { date: 'desc' },
       include: {
         attendances: {
-          include: { user: { select: { id: true, name: true } } },
+          include: { user: { select: { id: true, name: true, number: true, photoUrl: true } } },
         },
       },
       take: 100,
@@ -180,7 +181,7 @@ export default async function SchedulePage() {
     // 現メンバー（未回答の算出用）
     prisma.user.findMany({
       where: { isGuest: false, email: { endsWith: '@b' } },
-      select: { id: true, name: true },
+      select: { id: true, name: true, number: true, photoUrl: true },
       orderBy: [{ number: 'asc' }, { name: 'asc' }],
     }),
   ])
@@ -333,61 +334,73 @@ export default async function SchedulePage() {
                 )}
 
                 {/* 出欠集計 */}
-                <div className="mt-4 pt-4 border-t border-[#1e3a5f]/30 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-                  <div>
-                    <span className="text-[#22c55e] font-bold">
-                      ✓ 参加 {totalAttending}名
-                      {guests.length > 0 && <span className="text-[#64748b] font-normal">（助っ人{guests.length}名）</span>}
-                    </span>
-                    {attending.length > 0 && (
-                      <div className="mt-1 text-[#64748b] leading-relaxed">
-                        {attending.map(a => (
-                          <div key={a.userId}>
-                            {a.user.name}
-                            {a.note && <span className="block pl-2 text-[#94a3b8]">↳ {a.note}</span>}
+                <div className="mt-5 border-t border-[#1e3a5f]/30 pt-5">
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="text-[10px] font-black tracking-[0.28em] text-[#60a5fa]">TEAM BENCH</div>
+                      <h3 className="mt-1 text-base font-black text-[#e2e8f0]">出欠ベンチボード</h3>
+                    </div>
+                    <div className="rounded-full border border-[#22c55e]/30 bg-[#22c55e]/10 px-3 py-1 text-xs font-black text-[#22c55e]">
+                      参加予定 {totalAttending}名
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="rounded-2xl border border-[#22c55e]/20 bg-[#22c55e]/[0.04] p-4">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-xs font-black text-[#22c55e]">✓ 参加</span>
+                        <span className="text-xs text-[#64748b]">{totalAttending}名{guests.length > 0 ? `（助っ人${guests.length}名）` : ''}</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {attending.map(item => (
+                          <div key={item.userId} className="flex min-w-[145px] items-center gap-2 rounded-xl border border-[#22c55e]/20 bg-[#081b18] px-2.5 py-2">
+                            <MemberAvatar photoUrl={item.user.photoUrl} name={item.user.name} number={item.user.number} size="sm" />
+                            <div className="min-w-0">
+                              <div className="truncate text-xs font-bold text-[#d1fae5]">
+                                {item.user.number != null && <span className="mr-1 text-[#22c55e]">#{item.user.number}</span>}
+                                {item.user.name}
+                              </div>
+                              {item.note && <div className="mt-0.5 max-w-[170px] truncate text-[10px] text-[#94a3b8]" title={item.note}>{item.note}</div>}
+                            </div>
                           </div>
                         ))}
                         {guests.map((guest, index) => (
-                          <div key={guest.key} className="text-[#60a5fa]">
-                            助っ人{index + 1}（{guest.ownerName}）
+                          <div key={guest.key} className="flex min-w-[145px] items-center gap-2 rounded-xl border border-[#60a5fa]/25 bg-[#0b1830] px-2.5 py-2">
+                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#2563eb]/25 text-[10px] font-black text-[#60a5fa]">G</div>
+                            <div className="text-xs font-bold text-[#bfdbfe]">助っ人{index + 1}<span className="block text-[10px] font-normal text-[#64748b]">（{guest.ownerName}）</span></div>
                           </div>
                         ))}
+                        {attending.length === 0 && <span className="text-xs text-[#475569]">参加者はまだいません</span>}
                       </div>
-                    )}
-                  </div>
-                  <div>
-                    <span className="text-[#ef4444] font-bold">✗ 欠席 {absent.length}名</span>
-                    {absent.length > 0 && (
-                      <div className="mt-1 text-[#64748b] leading-relaxed">
-                        {absent.map(a => (
-                          <div key={a.userId}>
-                            {a.user.name}
-                            {a.note && <span className="block pl-2 text-[#94a3b8]">↳ {a.note}</span>}
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
+                      {[
+                        { title: '✗ 欠席', color: '#ef4444', rows: absent },
+                        { title: '? 未定', color: '#f59e0b', rows: maybe },
+                        { title: '▢ 未回答', color: '#94a3b8', rows: notResponded },
+                      ].map(section => (
+                        <div key={section.title} className="rounded-2xl border border-[#1e3a5f]/70 bg-[#09131f] p-3">
+                          <div className="mb-2 flex items-center justify-between text-xs font-black" style={{ color: section.color }}>
+                            <span>{section.title}</span><span>{section.rows.length}名</span>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <span className="text-[#f59e0b] font-bold">? 未定 {maybe.length}名</span>
-                    {maybe.length > 0 && (
-                      <div className="mt-1 text-[#64748b] leading-relaxed">
-                        {maybe.map(a => (
-                          <div key={a.userId}>
-                            {a.user.name}
-                            {a.note && <span className="block pl-2 text-[#94a3b8]">↳ {a.note}</span>}
+                          <div className="flex flex-wrap gap-1.5">
+                            {section.rows.map(item => {
+                              const user = 'user' in item ? item.user : item
+                              const note = 'note' in item ? item.note : null
+                              return (
+                                <div key={user.id} className="flex items-center gap-1.5 rounded-lg border border-[#1e3a5f]/70 bg-[#0d1b2a] px-2 py-1.5" title={note ?? undefined}>
+                                  <MemberAvatar photoUrl={user.photoUrl} name={user.name} number={user.number} size="sm" />
+                                  <span className="max-w-[90px] truncate text-[11px] font-semibold text-[#94a3b8]">{user.name}</span>
+                                  {note && <span className="text-[9px] text-[#60a5fa]">●</span>}
+                                </div>
+                              )
+                            })}
+                            {section.rows.length === 0 && <span className="text-[10px] text-[#334155]">なし</span>}
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <span className="text-[#e2e8f0] font-bold">▢ 未回答 {notResponded.length}名</span>
-                    {notResponded.length > 0 && (
-                      <div className="mt-1 text-[#e2e8f0] font-bold leading-relaxed">
-                        {notResponded.map(m => m.name).join('・')}
-                      </div>
-                    )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
       </div>

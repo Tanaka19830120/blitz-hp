@@ -204,6 +204,78 @@ export default async function HomePage() {
         </div>
       </section>
 
+      {/* 今日のBLITZ */}
+      <section className="relative z-20 -mt-8 max-w-7xl mx-auto px-4 pb-8">
+        <div className="relative overflow-hidden rounded-3xl border border-[#2563eb]/30 bg-[#081321] shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_20%,rgba(37,99,235,0.2),transparent_38%)]" />
+          <div className="relative grid gap-0 lg:grid-cols-[260px_1fr]">
+            <div className="flex flex-col justify-center border-b border-[#1e3a5f] bg-[#0d1b2a]/90 px-7 py-6 lg:border-b-0 lg:border-r">
+              <span className="text-[10px] font-black tracking-[0.38em] text-[#60a5fa]">TODAY&apos;S BLITZ</span>
+              <h2 className="mt-2 text-2xl font-black text-white">今日のBLITZ</h2>
+              <p className="mt-2 text-xs leading-relaxed text-[#64748b]">
+                開くたびに、いま一番知りたいチーム情報をお届けします。
+              </p>
+            </div>
+
+            <div className="flex flex-col justify-between gap-5 px-7 py-6 md:flex-row md:items-center md:px-9">
+              {todaySchedules.length > 0 ? (
+                <>
+                  <div>
+                    <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[#fbbf24]/40 bg-[#fbbf24]/10 px-3 py-1 text-xs font-black text-[#fbbf24]">
+                      <span className="h-2 w-2 animate-pulse rounded-full bg-[#fbbf24]" /> GAME DAY
+                    </div>
+                    <div className="text-2xl font-black text-white">
+                      {todaySchedules.map(item => item.type === 'EVENT' ? item.opponent : `vs ${item.opponent}`).join(' / ')}
+                    </div>
+                    <div className="mt-2 text-sm text-[#94a3b8]">
+                      📍 {todaySchedules[0].location}
+                      {todaySchedules[0].meetTime && `　🕐 集合 ${todaySchedules[0].meetTime}`}
+                    </div>
+                  </div>
+                  <Link href="/schedule" className="btn-gold whitespace-nowrap">本日の予定を見る →</Link>
+                </>
+              ) : nextSchedule ? (
+                <>
+                  <div>
+                    <div className="mb-2 text-xs font-black tracking-[0.25em] text-[#60a5fa]">NEXT MISSION</div>
+                    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                      <span className="text-3xl font-black text-white">
+                        {daysUntil(nextSchedule.date) === 0 ? 'TODAY' : `あと${daysUntil(nextSchedule.date)}日`}
+                      </span>
+                      <span className="text-xl font-bold text-[#fbbf24]">
+                        {nextSchedule.type === 'EVENT' ? nextSchedule.opponent : `vs ${nextSchedule.opponent}`}
+                      </span>
+                    </div>
+                    <div className="mt-2 text-sm text-[#64748b]">{formatDate(nextSchedule.date)}　📍 {nextSchedule.location}</div>
+                  </div>
+                  <Link href="/schedule" className="btn-primary whitespace-nowrap">出欠を登録する →</Link>
+                </>
+              ) : games.length > 0 ? (
+                <>
+                  <div>
+                    <div className="mb-2 text-xs font-black tracking-[0.25em] text-[#60a5fa]">LATEST RESULT</div>
+                    <div className="flex items-center gap-4">
+                      <span className={games[0].result === 'WIN' ? 'text-[#22c55e]' : games[0].result === 'LOSE' ? 'text-[#ef4444]' : 'text-[#f59e0b]'}>
+                        <span className="text-3xl font-black">{games[0].ourScore} - {games[0].opponentScore}</span>
+                      </span>
+                      <span className="text-lg font-bold text-[#e2e8f0]">vs {games[0].schedule.opponent}</span>
+                    </div>
+                    <div className="mt-2 text-sm text-[#64748b]">{formatDate(games[0].schedule.date)}</div>
+                  </div>
+                  <Link href={`/results/${games[0].scheduleId}`} className="btn-primary whitespace-nowrap">試合を振り返る →</Link>
+                </>
+              ) : (
+                <div>
+                  <div className="mb-2 text-xs font-black tracking-[0.25em] text-[#60a5fa]">TEAM STATUS</div>
+                  <div className="text-2xl font-black text-white">次の予定を準備中です</div>
+                  <div className="mt-2 text-sm text-[#64748b]">新しい試合・イベントをお楽しみに。</div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Next Game */}
       {nextSchedule && (
         <section className="max-w-7xl mx-auto px-4 py-12">

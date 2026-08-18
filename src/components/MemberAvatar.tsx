@@ -26,6 +26,13 @@ const textClasses = {
   xl: 'text-2xl',
 }
 
+const imageSizes = {
+  sm: '28px',
+  md: '56px',
+  lg: '80px',
+  xl: '96px',
+}
+
 export function MemberAvatar({ photoUrl, name, number, size = 'md', className = '' }: MemberAvatarProps) {
   const [imgError, setImgError] = useState(false)
 
@@ -40,6 +47,7 @@ export function MemberAvatar({ photoUrl, name, number, size = 'md', className = 
           src={photoUrl!}
           alt={name}
           fill
+          sizes={imageSizes[size]}
           className="object-cover"
           onError={() => setImgError(true)}
         />
