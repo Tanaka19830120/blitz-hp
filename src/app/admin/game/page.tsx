@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { sendToLineGroup, buildGameResult } from '@/lib/line'
 import { ScoreBookEditor } from '@/components/ScoreBookEditor'
-import { calcBatterStats, type ScoreBookData, type BatterSub } from '@/lib/scorebook'
+import { calcBatterStats, splitBatterAppearances, ZERO_STATS, type ScoreBookData, type BatterStats } from '@/lib/scorebook'
 
 // ─── 統合サーバーアクション ────────────────────────────────────────────────
 // スコア + スコアブック + 個人成績を一括保存
@@ -39,14 +39,28 @@ async function saveGame(scheduleId: string, json: string, sendLine: boolean): Pr
   await prisma.pitchingStat.deleteMany({ where: { gameId: game.id } })
 
   // ── 個人成績: スコアブックから自動計算 ──
+  const statsByUser = new Map<string, { stats: BatterStats; battingOrder: number; position?: string }>()
   for (const batter of data.batters) {
-    if (!batter.userId) continue
-    const stats = calcBatterStats(batter.cells)
-    if (stats.pa === 0) continue
+    for (const appearance of splitBatterAppearances(batter)) {
+      if (!appearance.userId) continue
+      const stats = calcBatterStats(appearance.cells)
+      if (stats.pa === 0) continue
+      const current = statsByUser.get(appearance.userId) ?? {
+        stats: { ...ZERO_STATS },
+        battingOrder: appearance.order,
+        position: appearance.position,
+      }
+      for (const key of Object.keys(ZERO_STATS) as (keyof BatterStats)[]) {
+        current.stats[key] += stats[key]
+      }
+      statsByUser.set(appearance.userId, current)
+    }
+  }
 
+  for (const [userId, { stats, battingOrder, position }] of statsByUser) {
     await prisma.gameStat.create({
       data: {
-        userId:           batter.userId,
+        userId,
         gameId:           game.id,
         plateAppearances: stats.pa,
         atBats:           stats.ab,
@@ -61,7 +75,8 @@ async function saveGame(scheduleId: string, json: string, sendLine: boolean): Pr
         hitByPitch:       stats.hbp,
         sacrificeBunts:   stats.sac,
         sacrificeFlies:   stats.sf,
-        battingOrder:     batter.order,
+        battingOrder,
+        position:         position || null,
         runs:             0,
       },
     })
@@ -91,7 +106,7 @@ async function saveGame(scheduleId: string, json: string, sendLine: boolean): Pr
     const schedule = await prisma.schedule.findUnique({ where: { id: scheduleId } })
     if (schedule) {
       const userIds = [
-        ...data.batters.map(b => b.userId).filter(Boolean),
+        ...data.batters.flatMap(b => [b.userId, ...(b.subs ?? []).map(s => s.userId)]).filter(Boolean),
         ...data.pitchers.map(p => p.userId).filter(Boolean),
       ]
       const playerList = userIds.length > 0
@@ -131,7 +146,7 @@ async function sendGameResultLine(scheduleId: string, json: string): Promise<voi
   else                               result = 'DRAW'
 
   const userIds = [
-    ...data.batters.map(b => b.userId).filter(Boolean),
+    ...data.batters.flatMap(b => [b.userId, ...(b.subs ?? []).map(s => s.userId)]).filter(Boolean),
     ...data.pitchers.map(p => p.userId).filter(Boolean),
   ]
   const playerList = userIds.length > 0

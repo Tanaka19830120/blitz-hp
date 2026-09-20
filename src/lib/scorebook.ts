@@ -68,6 +68,16 @@ export interface BatterStats {
   k:         number
 }
 
+export interface BatterAppearance {
+  order:       number
+  userId:      string
+  position?:   string
+  cells:       Record<number, string>
+  fromInning:  number
+  toInning?:   number
+  isSubstitute: boolean
+}
+
 export const ZERO_STATS: BatterStats = {
   pa: 0, ab: 0, h: 0, doubles: 0, triples: 0, homeRuns: 0,
   rbi: 0, sb: 0, bb: 0, hbp: 0, sac: 0, sf: 0, k: 0,
@@ -119,6 +129,57 @@ export function calcBatterStats(cells: Record<number, string>): BatterStats {
     }
   }
   return stats
+}
+
+/**
+ * 打順枠の共有セルを、スタメンと途中出場選手の出場期間ごとに分割する。
+ * 交代回は途中出場選手側へ含め、次の交代があればその直前までを担当範囲とする。
+ */
+export function splitBatterAppearances(batter: BatterSlot): BatterAppearance[] {
+  const subs = [...(batter.subs ?? [])]
+    .map((sub, index) => ({ sub, index }))
+    .sort((a, b) => a.sub.fromInning - b.sub.fromInning || a.index - b.index)
+
+  const cellsInRange = (
+    sharedCells: Record<number, string>,
+    fromInning: number,
+    toInning?: number,
+    ownCells?: Record<number, string>,
+  ): Record<number, string> => {
+    const merged = { ...sharedCells, ...(ownCells ?? {}) }
+    return Object.fromEntries(
+      Object.entries(merged).filter(([inning]) => {
+        const n = Number(inning)
+        return n >= fromInning && (toInning == null || n < toInning)
+      })
+    ) as Record<number, string>
+  }
+
+  const firstSubInning = subs[0]?.sub.fromInning
+  const appearances: BatterAppearance[] = [{
+    order: batter.order,
+    userId: batter.userId,
+    position: batter.position,
+    cells: cellsInRange(batter.cells, 1, firstSubInning),
+    fromInning: 1,
+    toInning: firstSubInning,
+    isSubstitute: false,
+  }]
+
+  subs.forEach(({ sub }, index) => {
+    const nextInning = subs[index + 1]?.sub.fromInning
+    appearances.push({
+      order: batter.order,
+      userId: sub.userId,
+      position: sub.position,
+      cells: cellsInRange(batter.cells, sub.fromInning, nextInning, sub.cells),
+      fromInning: sub.fromInning,
+      toInning: nextInning,
+      isSubstitute: true,
+    })
+  })
+
+  return appearances
 }
 
 /**

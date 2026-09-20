@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useRef, Fragment } from 'react'
 import type { ScoreBookData, BatterSlot, BatterSub, PitcherSlot, BatterStats } from '@/lib/scorebook'
-import { calcBatterStats, parseCode, cellColor } from '@/lib/scorebook'
+import { calcBatterStats, parseCode, cellColor, splitBatterAppearances } from '@/lib/scorebook'
 import { LineConfirmModal } from './LineConfirmModal'
 import { extractCellsFromImage, TEMPLATE_INNINGS } from '@/lib/cellExtractor'
 
@@ -80,8 +80,15 @@ function buildLinePreview(
   ]
 
   const hitters = batters
-    .filter(b => b.userId && playerMap.has(b.userId))
-    .map(b => ({ name: playerMap.get(b.userId)!.name, order: b.order, stats: calcBatterStats(b.cells) }))
+    .flatMap(b => splitBatterAppearances(b))
+    .filter(a => a.userId && playerMap.has(a.userId))
+    .map(a => ({
+      name: playerMap.get(a.userId)!.name,
+      order: a.order,
+      fromInning: a.fromInning,
+      isSubstitute: a.isSubstitute,
+      stats: calcBatterStats(a.cells),
+    }))
     .filter(h => h.stats.pa > 0)
 
   if (hitters.length > 0) {
@@ -89,7 +96,7 @@ function buildLinePreview(
     lines.push(`━━━━━━━━━━━━`)
     lines.push(`【打者成績】安打/打数`)
     for (const h of hitters) {
-      let line = `${h.order}番 ${h.name}: ${h.stats.h}/${h.stats.ab}`
+      let line = `${h.isSubstitute ? `↳${h.fromInning}回〜` : `${h.order}番`} ${h.name}: ${h.stats.h}/${h.stats.ab}`
       const pts: string[] = []
       if (h.stats.rbi      > 0) pts.push(`${h.stats.rbi}打点`)
       if (h.stats.homeRuns > 0) pts.push('HR')

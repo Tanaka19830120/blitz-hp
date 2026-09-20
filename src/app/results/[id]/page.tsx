@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { auth } from '@/auth'
 import { revalidatePath } from 'next/cache'
-import { calcBatterStats, cellColor, codeToJa, type ScoreBookData, type BatterStats } from '@/lib/scorebook'
+import { calcBatterStats, cellColor, codeToJa, splitBatterAppearances, type ScoreBookData, type BatterStats } from '@/lib/scorebook'
 import AdminEditLink from '@/components/AdminEditLink'
 import MvpVote from '@/components/MvpVote'
 
@@ -139,26 +139,25 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
   const innings = scorebook?.innings ?? inningScores?.blitz.length ?? 7
   const bookRows = scorebook
     ? scorebook.batters
-        .filter(b => b.userId && (Object.keys(b.cells).length > 0 || (b.subs?.length ?? 0) > 0))
-        .map(b => {
-          const stats = calcBatterStats(b.cells)
-          const player = playerMap.get(b.userId)
-          const subNames = (b.subs ?? [])
-            .map(s => playerMap.get(s.userId))
-            .filter(Boolean)
-            .map((p, i) => `${p!.number != null ? `#${p!.number} ` : ''}${p!.name}（${b.subs![i].fromInning}回〜）`)
+        .filter(b => (b.userId || b.subs?.some(s => s.userId)) && (Object.keys(b.cells).length > 0 || (b.subs?.length ?? 0) > 0))
+        .flatMap(b => splitBatterAppearances(b))
+        .filter(a => a.userId && playerMap.has(a.userId))
+        .map(a => {
+          const stats = calcBatterStats(a.cells)
+          const player = playerMap.get(a.userId)
           return {
-            order: b.order,
-            userId: b.userId,
+            order: a.order,
+            userId: a.userId,
             name: player?.name ?? '(未設定)',
             number: player?.number ?? null,
-            position: b.position ?? '',
-            cells: b.cells,
+            position: a.position ?? '',
+            cells: a.cells,
             stats,
-            subNames,
+            fromInning: a.fromInning,
+            isSubstitute: a.isSubstitute,
           }
         })
-        .sort((a, b) => a.order - b.order)
+        .sort((a, b) => a.order - b.order || a.fromInning - b.fromInning)
     : []
 
   // チーム集計（スコアブックがあればそこから、なければ game.stats から）
@@ -323,8 +322,10 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
               </thead>
               <tbody>
                 {bookRows.map((r, idx) => (
-                  <tr key={r.order} className={`border-b border-[#0f2035]/40 ${idx % 2 === 0 ? '' : 'bg-white/[0.045]'}`}>
-                    <td className="py-1.5 pr-1 text-center text-[#64748b]">{r.order}</td>
+                  <tr key={`${r.order}-${r.userId}-${r.fromInning}`} className={`border-b border-[#0f2035]/40 ${idx % 2 === 0 ? '' : 'bg-white/[0.045]'}`}>
+                    <td className={`py-1.5 pr-1 text-center ${r.isSubstitute ? 'text-[#a78bfa]' : 'text-[#64748b]'}`}>
+                      {r.isSubstitute ? '↳' : r.order}
+                    </td>
                     <td className="py-1.5 px-2">
                       {r.userId ? (
                         <Link href={`/members/${r.userId}`} className="flex items-center gap-1.5 hover:opacity-80 transition-opacity">
@@ -341,8 +342,8 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
                           <span className="font-medium text-[#e2e8f0]">{r.name}</span>
                         </div>
                       )}
-                      {r.subNames.length > 0 && (
-                        <div className="text-[10px] text-[#a78bfa] mt-0.5">↳ {r.subNames.join(' / ')}</div>
+                      {r.isSubstitute && (
+                        <div className="text-[10px] text-[#a78bfa] mt-0.5">{r.fromInning}回から途中出場</div>
                       )}
                     </td>
                     {Array.from({ length: innings }, (_, i) => {

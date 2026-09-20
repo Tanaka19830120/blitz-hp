@@ -6,7 +6,7 @@
 
 import { prisma } from './prisma'
 import type { ScoreBookData } from './scorebook'
-import { calcBatterStats } from './scorebook'
+import { calcBatterStats, splitBatterAppearances } from './scorebook'
 import { mapsUrl } from './maps'
 
 const LINE_PUSH_API = 'https://api.line.me/v2/bot/message/push'
@@ -430,8 +430,15 @@ export function buildGameResult(
 
     // ── 打者成績 ──
     const hitters = scorebook.batters
-      .filter(b => b.userId && playerNames.has(b.userId))
-      .map(b => ({ name: playerNames.get(b.userId)!, order: b.order, stats: calcBatterStats(b.cells) }))
+      .flatMap(b => splitBatterAppearances(b))
+      .filter(a => a.userId && playerNames.has(a.userId))
+      .map(a => ({
+        name: playerNames.get(a.userId)!,
+        order: a.order,
+        fromInning: a.fromInning,
+        isSubstitute: a.isSubstitute,
+        stats: calcBatterStats(a.cells),
+      }))
       .filter(h => h.stats.pa > 0)
 
     if (hitters.length > 0) {
@@ -439,7 +446,7 @@ export function buildGameResult(
       lines.push(`━━━━━━━━━━━━`)
       lines.push(`【打者成績】安打/打数`)
       for (const h of hitters) {
-        let line = `${h.order}番 ${h.name}: ${h.stats.h}/${h.stats.ab}`
+        let line = `${h.isSubstitute ? `↳${h.fromInning}回〜` : `${h.order}番`} ${h.name}: ${h.stats.h}/${h.stats.ab}`
         const pts: string[] = []
         if (h.stats.rbi      > 0) pts.push(`${h.stats.rbi}打点`)
         if (h.stats.homeRuns > 0) pts.push('HR')
