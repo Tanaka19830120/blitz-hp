@@ -1007,8 +1007,8 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
               <tr className="border-b border-[#1e3a5f]">
                 <th className="text-left py-1.5 px-2 text-[#64748b] w-16 font-normal">#</th>
                 <th className="text-left py-1.5 px-2 text-[#64748b] w-28 font-normal">選手</th>
-                <th className="text-center py-1.5 px-0.5 text-[#64748b] w-12 font-normal" title="前半守備">前守</th>
-                <th className="text-center py-1.5 px-0.5 text-[#64748b] w-12 font-normal" title="後半守備">後守</th>
+                <th className="text-center py-1.5 px-1 text-[#64748b] w-24 min-w-24 font-normal" title="前半守備">前守</th>
+                <th className="text-center py-1.5 px-1 text-[#64748b] w-24 min-w-24 font-normal" title="後半守備">後守</th>
                 {Array.from({ length: innings }, (_, i) => (
                   <th key={i + 1} className="text-center py-1.5 px-0.5 text-[#64748b] font-normal"
                     style={{ width: '76px', borderLeft: '1px solid #1e3a5f' }}>
@@ -1145,15 +1145,15 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
                         </select>
                       </td>
 
-                      <td className="py-0.5 px-0.5 align-middle">
+                      <td className="py-0.5 px-1 align-middle w-24 min-w-24">
                         <select value={b.position ?? ''} onChange={e => setBatterPosition(bIdx, e.target.value)}
-                          className="w-12 py-0.5 text-xs text-center">
+                          className="w-24 py-0.5 px-1 text-xs text-center">
                           {POSITIONS.map(pos => <option key={pos} value={pos}>{pos || '─'}</option>)}
                         </select>
                       </td>
-                      <td className="py-0.5 px-0.5 align-middle">
+                      <td className="py-0.5 px-1 align-middle w-24 min-w-24">
                         <select value={b.position2 ?? ''} onChange={e => setBatterPosition2(bIdx, e.target.value)}
-                          className="w-12 py-0.5 text-xs text-center text-[#94a3b8]">
+                          className="w-24 py-0.5 px-1 text-xs text-center text-[#94a3b8]">
                           {POSITIONS.map(pos => <option key={pos} value={pos}>{pos || '─'}</option>)}
                         </select>
                       </td>
@@ -1214,13 +1214,13 @@ export function ScoreBookEditor({ players, scheduleId, initialData, saveAction, 
                         </td>
 
                         {/* 前守: 空（交代前は出場していない） */}
-                        <td className="py-0.5 px-0.5 align-middle">
-                          <span className="text-[#1e3a5f] text-xs block text-center w-9">─</span>
+                        <td className="py-0.5 px-1 align-middle w-24 min-w-24">
+                          <span className="text-[#1e3a5f] text-xs block text-center w-24">─</span>
                         </td>
                         {/* 後守: 交代後の守備位置 */}
-                        <td className="py-0.5 px-0.5 align-middle">
+                        <td className="py-0.5 px-1 align-middle w-24 min-w-24">
                           <select value={sub.position ?? ''} onChange={e => setSubPosition(bIdx, sIdx, e.target.value)}
-                            className="w-12 py-0.5 text-xs text-center">
+                            className="w-24 py-0.5 px-1 text-xs text-center">
                             {POSITIONS.map(pos => <option key={pos} value={pos}>{pos || '─'}</option>)}
                           </select>
                         </td>
