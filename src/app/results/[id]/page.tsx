@@ -151,6 +151,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
             name: player?.name ?? '(未設定)',
             number: player?.number ?? null,
             position: a.position ?? '',
+            position2: a.position2 ?? '',
             cells: a.cells,
             stats,
             fromInning: a.fromInning,
@@ -310,6 +311,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
                 <tr className="text-[#64748b] border-b border-[#1e3a5f]">
                   <th className="py-2 pr-1 text-center w-6">#</th>
                   <th className="py-2 px-2 text-left w-32">選手</th>
+                  <th className="py-2 px-2 text-center w-16">守備</th>
                   {Array.from({ length: innings }, (_, i) => (
                     <th key={i} className="py-2 px-1 text-center"
                       style={{ minWidth: '52px', borderLeft: '1px solid #1e3a5f' }}>{i + 1}</th>
@@ -345,6 +347,15 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
                       {r.isSubstitute && (
                         <div className="text-[10px] text-[#a78bfa] mt-0.5">{r.fromInning}回から途中出場</div>
                       )}
+                    </td>
+                    <td className="py-1.5 px-2 text-center text-[#94a3b8] whitespace-nowrap">
+                      {r.position
+                        ? r.position2 && r.position2 !== r.position
+                          ? `${r.position}→${r.position2 === '─' ? 'なし' : r.position2}`
+                          : r.position
+                        : r.position2 && r.position2 !== '─'
+                          ? r.position2
+                          : '–'}
                     </td>
                     {Array.from({ length: innings }, (_, i) => {
                       const raw = r.cells[i + 1] ?? ''
@@ -388,7 +399,7 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-[#1e3a5f] font-bold">
-                  <td colSpan={2} className="py-2 px-2 text-[#64748b]">チーム計</td>
+                  <td colSpan={3} className="py-2 px-2 text-[#64748b]">チーム計</td>
                   <td colSpan={innings} style={{ borderLeft: '1px solid #1e3a5f' }} />
                   <td className="py-2 px-2 text-center font-mono text-[#60a5fa]" style={{ borderLeft: '1px solid #1e3a5f' }}>{teamAvg}</td>
                   {STAT_COLS.map(c => (

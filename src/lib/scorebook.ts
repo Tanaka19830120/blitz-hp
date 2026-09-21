@@ -72,6 +72,7 @@ export interface BatterAppearance {
   order:       number
   userId:      string
   position?:   string
+  position2?:  string
   cells:       Record<number, string>
   fromInning:  number
   toInning?:   number
@@ -160,6 +161,8 @@ export function splitBatterAppearances(batter: BatterSlot): BatterAppearance[] {
     order: batter.order,
     userId: batter.userId,
     position: batter.position,
+    // 守備変更だけの場合は前→後を表示。選手交代時の後守は交代選手側に表示する。
+    position2: subs.length === 0 ? batter.position2 : undefined,
     cells: cellsInRange(batter.cells, 1, firstSubInning),
     fromInning: 1,
     toInning: firstSubInning,
