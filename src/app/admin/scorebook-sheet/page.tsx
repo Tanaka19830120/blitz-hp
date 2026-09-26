@@ -165,8 +165,12 @@ export default async function ScoreBookSheetPage({
             box-shadow: none !important; margin: 0 !important; padding: 0 !important;
             min-height: unset !important; width: 100% !important;
             display: block !important;
+            /* ブラウザ・プリンターごとの印刷可能領域の差を吸収し、A4横1枚に収める */
+            zoom: 0.98;
           }
-          .punch-spacer { height: 10mm !important; display: block !important; }
+          /* 10mmでは最下部の外角マークが2ページ目へ押し出されるため、
+             記入欄の大きさは維持したまま上部余白だけを詰める。 */
+          .punch-spacer { height: 5mm !important; display: block !important; }
           .no-print { display: none !important; }
         }
         @media screen {
