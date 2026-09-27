@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 
 interface Props {
@@ -12,9 +12,13 @@ interface Props {
   isPending: boolean
 }
 
+const subscribeToClient = () => () => {}
+const getClientSnapshot = () => true
+const getServerSnapshot = () => false
+
 export function LineConfirmModal({ isOpen, title, preview, onConfirm, onCancel, isPending }: Props) {
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
+  const mounted = useSyncExternalStore(subscribeToClient, getClientSnapshot, getServerSnapshot)
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle')
 
   // 背面スクロールを抑止
   useEffect(() => {
@@ -25,6 +29,31 @@ export function LineConfirmModal({ isOpen, title, preview, onConfirm, onCancel, 
   }, [isOpen])
 
   if (!isOpen || !mounted) return null
+
+  async function copyFullText() {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(preview)
+      } else {
+        const textarea = document.createElement('textarea')
+        textarea.value = preview
+        textarea.setAttribute('readonly', '')
+        textarea.style.position = 'fixed'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.select()
+        textarea.setSelectionRange(0, textarea.value.length)
+        const copied = document.execCommand('copy')
+        document.body.removeChild(textarea)
+        if (!copied) throw new Error('copy failed')
+      }
+      setCopyStatus('copied')
+      window.setTimeout(() => setCopyStatus('idle'), 2500)
+    } catch {
+      setCopyStatus('error')
+      window.setTimeout(() => setCopyStatus('idle'), 3500)
+    }
+  }
 
   const modal = (
     <div
@@ -55,12 +84,29 @@ export function LineConfirmModal({ isOpen, title, preview, onConfirm, onCancel, 
         </div>
 
         {/* ボタン */}
-        <div className="px-5 pb-5 flex gap-3 justify-end border-t border-[#1e3a5f] pt-4 shrink-0">
+        <div className="px-5 pb-5 grid grid-cols-2 sm:flex gap-3 border-t border-[#1e3a5f] pt-4 shrink-0">
+          <button
+            type="button"
+            onClick={copyFullText}
+            className={`col-span-2 sm:col-span-1 sm:mr-auto text-sm px-4 py-2.5 rounded-xl border font-medium active:scale-95 transition-all ${
+              copyStatus === 'copied'
+                ? 'border-[#22c55e] bg-[#22c55e]/15 text-[#22c55e]'
+                : copyStatus === 'error'
+                  ? 'border-red-500/60 bg-red-500/10 text-red-400'
+                  : 'border-[#60a5fa]/60 bg-[#2563eb]/10 text-[#93c5fd] hover:bg-[#2563eb]/20'
+            }`}
+          >
+            {copyStatus === 'copied'
+              ? '✅ 全文をコピーしました'
+              : copyStatus === 'error'
+                ? '⚠ コピーできませんでした'
+                : '📋 全文コピー'}
+          </button>
           <button
             type="button"
             onClick={onCancel}
             disabled={isPending}
-            className="text-sm px-4 py-2.5 rounded-xl border border-[#1e3a5f] text-[#64748b] hover:text-[#94a3b8] hover:border-[#64748b]/50 transition-all"
+            className="text-sm px-4 py-2.5 rounded-xl border border-[#1e3a5f] text-[#64748b] hover:text-[#94a3b8] hover:border-[#64748b]/50 transition-all disabled:opacity-50"
           >
             キャンセル
           </button>
