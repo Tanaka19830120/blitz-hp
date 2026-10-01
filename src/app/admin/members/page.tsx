@@ -162,7 +162,7 @@ async function promoteMember(formData: FormData) {
 
   await prisma.user.update({
     where: { id },
-    data: { isGuest: false, email, password, number },
+    data: { isGuest: false, email, password, number, memberStatus: 'ACTIVE' },
   })
   revalidatePath('/members')
   revalidatePath('/stats')
@@ -180,12 +180,50 @@ async function retireMember(formData: FormData) {
   const loginId = user.email.replace(/@b$/, '')
   await prisma.user.update({
     where: { id },
-    data: { email: `${loginId}@retired` },
+    data: { email: `${loginId}@retired`, memberStatus: 'RETIRED' },
   })
   revalidatePath('/members')
   revalidatePath('/stats')
   revalidatePath('/admin/members')
   redirect(`/admin/members?toast=${encodeURIComponent('退団処理しました（元メンバーに移動）')}`)
+}
+
+async function pauseMember(formData: FormData) {
+  'use server'
+  const id = String(formData.get('id'))
+  const user = await prisma.user.findUnique({
+    where: { id },
+    select: { isGuest: true, email: true, memberStatus: true },
+  })
+  if (!user || user.isGuest || !user.email.endsWith('@b') || user.memberStatus !== 'ACTIVE') return
+  await prisma.user.update({ where: { id }, data: { memberStatus: 'ON_LEAVE' } })
+  revalidatePath('/members')
+  revalidatePath('/schedule')
+  revalidatePath('/stats')
+  revalidatePath('/admin')
+  revalidatePath('/admin/members')
+  revalidatePath('/admin/lineup')
+  revalidatePath('/admin/game')
+  redirect(`/admin/members?toast=${encodeURIComponent('休部中に変更しました')}`)
+}
+
+async function resumeMember(formData: FormData) {
+  'use server'
+  const id = String(formData.get('id'))
+  const user = await prisma.user.findUnique({
+    where: { id },
+    select: { isGuest: true, email: true, memberStatus: true },
+  })
+  if (!user || user.isGuest || !user.email.endsWith('@b') || user.memberStatus !== 'ON_LEAVE') return
+  await prisma.user.update({ where: { id }, data: { memberStatus: 'ACTIVE' } })
+  revalidatePath('/members')
+  revalidatePath('/schedule')
+  revalidatePath('/stats')
+  revalidatePath('/admin')
+  revalidatePath('/admin/members')
+  revalidatePath('/admin/lineup')
+  revalidatePath('/admin/game')
+  redirect(`/admin/members?toast=${encodeURIComponent('現メンバーに復帰しました')}`)
 }
 
 async function rejoinMember(formData: FormData) {
@@ -220,6 +258,7 @@ async function rejoinMember(formData: FormData) {
     data: {
       email:    `${loginId}@b`,
       number,
+      memberStatus: 'ACTIVE',
       ...(newHash ? { password: newHash } : {}),
     },
   })
@@ -253,13 +292,13 @@ export default async function AdminMembersPage({
 
   const allUsers = await prisma.user.findMany({
     orderBy: [{ role: 'asc' }, { number: 'asc' }, { name: 'asc' }],
-    select: { id: true, name: true, email: true, number: true, position: true, role: true, photoUrl: true, isGuest: true },
+    select: { id: true, name: true, email: true, number: true, position: true, role: true, photoUrl: true, isGuest: true, memberStatus: true },
   })
 
-  // 表示優先度: 現メンバー(@bログイン) → 元メンバー(取込・脱退) → 助っ人
+  // 表示優先度: 現メンバー → 休部中 → 元メンバー → 助っ人
   // 現メンバー = 正式ログインアカウント(email が @b)かつ助っ人でない
   const tier = (m: typeof allUsers[number]) =>
-    m.isGuest ? 2 : (m.email.endsWith('@b') ? 0 : 1)
+    m.isGuest ? 3 : m.memberStatus === 'ACTIVE' ? 0 : m.memberStatus === 'ON_LEAVE' ? 1 : 2
   const members = [...allUsers].sort((a, b) => tier(a) - tier(b))  // 同tier内は元の並び維持
 
   const editMember       = editId    ? members.find((m) => m.id === editId)    : null
@@ -475,8 +514,9 @@ export default async function AdminMembersPage({
 
       {/* Member list */}
       {[
-        { label: '現メンバー', color: 'text-[#60a5fa]', filter: (m: typeof members[number]) => !m.isGuest && m.email.endsWith('@b') },
-        { label: '元メンバー', color: 'text-[#8b5cf6]', filter: (m: typeof members[number]) => !m.isGuest && !m.email.endsWith('@b') },
+        { label: '現メンバー', color: 'text-[#60a5fa]', filter: (m: typeof members[number]) => !m.isGuest && m.memberStatus === 'ACTIVE' },
+        { label: '休部中',     color: 'text-[#f59e0b]', filter: (m: typeof members[number]) => !m.isGuest && m.memberStatus === 'ON_LEAVE' },
+        { label: '元メンバー', color: 'text-[#8b5cf6]', filter: (m: typeof members[number]) => !m.isGuest && m.memberStatus === 'RETIRED' },
         { label: '助っ人',     color: 'text-[#94a3b8]', filter: (m: typeof members[number]) => m.isGuest },
       ].map(({ label, color, filter }) => {
         const group = members.filter(filter)
@@ -514,7 +554,8 @@ export default async function AdminMembersPage({
                   {m.name}
                   {m.role === 'ADMIN' && <span className="text-xs text-[#fbbf24]">管理者</span>}
                   {m.isGuest && <span className="text-[10px] text-[#a78bfa] border border-[#a78bfa]/40 rounded px-1">助っ人</span>}
-                  {!m.isGuest && !m.email.endsWith('@b') && <span className="text-[10px] text-[#64748b] border border-[#334155] rounded px-1">元メンバー</span>}
+                  {!m.isGuest && m.memberStatus === 'ON_LEAVE' && <span className="text-[10px] text-[#f59e0b] border border-[#f59e0b]/40 rounded px-1">休部中</span>}
+                  {!m.isGuest && m.memberStatus === 'RETIRED' && <span className="text-[10px] text-[#64748b] border border-[#334155] rounded px-1">元メンバー</span>}
                 </div>
                 <div className="text-xs text-[#475569] truncate">{m.position || m.email}</div>
               </div>
@@ -543,7 +584,27 @@ export default async function AdminMembersPage({
                 編集
               </Link>
               {/* 退団 / 復帰 */}
-              {m.email.endsWith('@b') && (
+              {m.memberStatus === 'ACTIVE' && (
+                <form action={pauseMember}>
+                  <input type="hidden" name="id" value={m.id} />
+                  <SubmitButton
+                    pendingLabel="処理中…"
+                    confirm={`${m.name} を休部中に変更しますか？\n出欠の未回答対象やスタメン候補から外れます。`}
+                    className="text-xs text-[#f59e0b]/60 hover:text-[#f59e0b] transition-colors"
+                  >
+                    休部
+                  </SubmitButton>
+                </form>
+              )}
+              {m.memberStatus === 'ON_LEAVE' && (
+                <form action={resumeMember}>
+                  <input type="hidden" name="id" value={m.id} />
+                  <SubmitButton pendingLabel="処理中…" className="text-xs text-[#22c55e]/60 hover:text-[#22c55e] transition-colors">
+                    復帰
+                  </SubmitButton>
+                </form>
+              )}
+              {(m.memberStatus === 'ACTIVE' || m.memberStatus === 'ON_LEAVE') && (
                 <form action={retireMember}>
                   <input type="hidden" name="id" value={m.id} />
                   <SubmitButton

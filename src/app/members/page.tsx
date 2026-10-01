@@ -11,10 +11,19 @@ export default async function MembersPage({
 }) {
   const sp = await searchParams
   const isAlumni = sp.tab === 'alumni'
+  const isOnLeave = sp.tab === 'leave'
 
-  const [current, alumni] = await Promise.all([
+  const [current, onLeave, alumni] = await Promise.all([
     prisma.user.findMany({
-      where: { isGuest: false, email: { endsWith: '@b' } },
+      where: { isGuest: false, memberStatus: 'ACTIVE' },
+      orderBy: [{ number: 'asc' }, { name: 'asc' }],
+      select: {
+        id: true, name: true, number: true, position: true, photoUrl: true, role: true, themeColor: true,
+        _count: { select: { gameStats: true } },
+      },
+    }),
+    prisma.user.findMany({
+      where: { isGuest: false, memberStatus: 'ON_LEAVE' },
       orderBy: [{ number: 'asc' }, { name: 'asc' }],
       select: {
         id: true, name: true, number: true, position: true, photoUrl: true, role: true, themeColor: true,
@@ -23,20 +32,19 @@ export default async function MembersPage({
     }),
     prisma.user.findMany({
       where: {
-        OR: [
-          { isGuest: false, NOT: { email: { endsWith: '@b' } } },
-        ],
+        isGuest: false,
+        memberStatus: 'RETIRED',
         gameStats: { some: {} },
       },
       orderBy: [{ number: 'asc' }, { name: 'asc' }],
       select: {
-        id: true, name: true, number: true, position: true, photoUrl: true, themeColor: true,
+        id: true, name: true, number: true, position: true, photoUrl: true, role: true, themeColor: true,
         _count: { select: { gameStats: true } },
       },
     }),
   ])
 
-  const members = isAlumni ? alumni : current
+  const members = isAlumni ? alumni : isOnLeave ? onLeave : current
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-12">
@@ -46,16 +54,26 @@ export default async function MembersPage({
       </div>
 
       {/* タブ */}
-      <div className="flex gap-2 mb-6">
+      <div className="flex flex-wrap gap-2 mb-6">
         <Link
           href="/members"
           className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-all ${
-            !isAlumni
+            !isAlumni && !isOnLeave
               ? 'bg-[#2563eb] border-[#2563eb] text-white'
               : 'border-[#1e3a5f] text-[#64748b] hover:border-[#2563eb]/50 hover:text-[#94a3b8]'
           }`}
         >
           現メンバー {current.length}名
+        </Link>
+        <Link
+          href="/members?tab=leave"
+          className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-all ${
+            isOnLeave
+              ? 'bg-[#d97706] border-[#d97706] text-white'
+              : 'border-[#1e3a5f] text-[#64748b] hover:border-[#d97706]/50 hover:text-[#94a3b8]'
+          }`}
+        >
+          休部中 {onLeave.length}名
         </Link>
         <Link
           href="/members?tab=alumni"
@@ -70,12 +88,12 @@ export default async function MembersPage({
       </div>
 
       <h2 className="text-xs font-bold tracking-[0.3em] text-[#60a5fa] uppercase mb-4">
-        {isAlumni ? 'Alumni' : 'Players'}
+        {isAlumni ? 'Alumni' : isOnLeave ? 'On Leave' : 'Players'}
       </h2>
 
       {members.length === 0 ? (
         <div className="glass-card rounded-2xl p-12 text-center text-[#64748b]">
-          {isAlumni ? '元メンバーのデータはありません' : 'メンバーはまだ登録されていません'}
+          {isAlumni ? '元メンバーのデータはありません' : isOnLeave ? '休部中のメンバーはいません' : 'メンバーはまだ登録されていません'}
         </div>
       ) : (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -126,11 +144,14 @@ export default async function MembersPage({
                 </div>
 
                 <div className="flex min-h-6 items-center justify-center gap-1.5">
-                    {'role' in member && member.role === 'ADMIN' && (
+                    {member.role === 'ADMIN' && (
                     <span className="rounded-full border border-[#fbbf24]/40 bg-[#fbbf24]/10 px-2 py-0.5 text-[10px] font-bold text-[#fbbf24]">CAPTAIN</span>
                     )}
                     {isAlumni && (
                     <span className="rounded-full border border-[#8b5cf6]/40 bg-[#8b5cf6]/10 px-2 py-0.5 text-[10px] font-bold text-[#a78bfa]">ALUMNI</span>
+                    )}
+                    {isOnLeave && (
+                    <span className="rounded-full border border-[#f59e0b]/40 bg-[#f59e0b]/10 px-2 py-0.5 text-[10px] font-bold text-[#fbbf24]">休部中</span>
                     )}
                 </div>
 

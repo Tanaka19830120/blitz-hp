@@ -49,7 +49,7 @@ function displayInnings(outs: number) {
 async function getPitcherRanking(year?: number, includeAlumni = false): Promise<PitcherRow[]> {
   const dateFilter = year ? { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31T23:59:59`) } : undefined
   const players = await prisma.user.findMany({
-    where: includeAlumni ? { isGuest: false } : { isGuest: false, email: { endsWith: '@b' } },
+    where: includeAlumni ? { isGuest: false } : { isGuest: false, memberStatus: 'ACTIVE' },
     include: {
       pitchingStats: {
         include: { game: { include: { schedule: { select: { date: true } } } } },

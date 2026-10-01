@@ -39,7 +39,7 @@ export async function getBattingStats(year?: number, includeAlumni = false): Pro
   const players = await prisma.user.findMany({
     where: includeAlumni
       ? { isGuest: false }
-      : { isGuest: false, email: { endsWith: '@b' } },
+      : { isGuest: false, memberStatus: 'ACTIVE' },
     include: {
       gameStats: {
         include: { game: { include: { schedule: { select: { date: true } } } } },
@@ -117,7 +117,7 @@ export async function getPlayerTrends(
   const players = await prisma.user.findMany({
     where: {
       id: { in: playerIds },
-      ...(includeAlumni ? { isGuest: false } : { isGuest: false, email: { endsWith: '@b' } }),
+      ...(includeAlumni ? { isGuest: false } : { isGuest: false, memberStatus: 'ACTIVE' }),
     },
     select: {
       id: true, name: true, number: true,

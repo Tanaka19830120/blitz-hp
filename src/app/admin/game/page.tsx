@@ -287,7 +287,7 @@ export default async function AdminGamePage({
     ? dataPlayerIds
     : new Set(lineup.map(l => l.userId))
   // 現メンバー = 正式ログインアカウント(@b)かつ助っ人でない
-  const isCurrent = (p: typeof allPlayers[number]) => !p.isGuest && p.email.endsWith('@b')
+  const isCurrent = (p: typeof allPlayers[number]) => !p.isGuest && p.memberStatus === 'ACTIVE'
   const lineupPlayers = allPlayers.filter(p => lineupPlayerIds.has(p.id) && isCurrent(p))
   const otherCurrent  = allPlayers.filter(p => !lineupPlayerIds.has(p.id) && isCurrent(p))
   const nonMembers    = allPlayers.filter(p => !isCurrent(p))  // 元メンバー・助っ人は末尾へ

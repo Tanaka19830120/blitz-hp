@@ -67,7 +67,7 @@ async function updateAttendanceAsAdmin(
   const [schedule, targetUser] = await Promise.all([
     prisma.schedule.findUnique({ where: { id: scheduleId } }),
     prisma.user.findFirst({
-      where: { id: targetUserId, isGuest: false, email: { endsWith: '@b' } },
+      where: { id: targetUserId, isGuest: false, memberStatus: 'ACTIVE' },
       select: { id: true, name: true },
     }),
   ])
@@ -180,7 +180,7 @@ export default async function SchedulePage() {
     getGameTypeLabels(),
     // 現メンバー（未回答の算出用）
     prisma.user.findMany({
-      where: { isGuest: false, email: { endsWith: '@b' } },
+      where: { isGuest: false, memberStatus: 'ACTIVE' },
       select: { id: true, name: true, number: true, photoUrl: true },
       orderBy: [{ number: 'asc' }, { name: 'asc' }],
     }),

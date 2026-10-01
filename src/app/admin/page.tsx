@@ -55,7 +55,7 @@ async function sendLineReminder(scheduleId: string): Promise<void> {
 // 現メンバー（未回答の算出用）
 async function getCurrentMembers() {
   return prisma.user.findMany({
-    where: { isGuest: false, email: { endsWith: '@b' } },
+    where: { isGuest: false, memberStatus: 'ACTIVE' },
     select: { id: true, name: true },
     orderBy: [{ number: 'asc' }, { name: 'asc' }],
   })

@@ -37,6 +37,17 @@ async function main() {
   // v13: 個人ページテーマカラー
   await safeAddColumn('User', 'themeColor', 'TEXT')
 
+  // v16: メンバーステータス（現役 / 休部中 / 退団）
+  await safeAddColumn('User', 'memberStatus', "TEXT NOT NULL DEFAULT 'ACTIVE'")
+  // 既存の退団・元メンバーを初回移行時に RETIRED として分類
+  await client.execute(`
+    UPDATE "User"
+       SET "memberStatus" = 'RETIRED'
+     WHERE "isGuest" = 0
+       AND "email" NOT LIKE '%@b'
+       AND "memberStatus" = 'ACTIVE';
+  `)
+
   // v15: 出欠登録者が連れてくる助っ人数
   await safeAddColumn('Attendance', 'guestCount', 'INTEGER NOT NULL DEFAULT 0')
 

@@ -62,7 +62,7 @@ async function getPitchingStats(year?: number, includeAlumni = false): Promise<P
   const players = await prisma.user.findMany({
     where: includeAlumni
       ? { isGuest: false }
-      : { isGuest: false, email: { endsWith: '@b' } },
+      : { isGuest: false, memberStatus: 'ACTIVE' },
     include: {
       pitchingStats: {
         include: {
@@ -148,7 +148,7 @@ export default async function StatsPage({
       : undefined
     const [players, teamTotal] = await Promise.all([
       prisma.user.findMany({
-        where: isAllTime ? { isGuest: false } : { isGuest: false, email: { endsWith: '@b' } },
+        where: isAllTime ? { isGuest: false } : { isGuest: false, memberStatus: 'ACTIVE' },
         select: {
           id: true, name: true, number: true,
           gameStats: {

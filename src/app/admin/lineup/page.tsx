@@ -269,7 +269,7 @@ export default async function AdminLineupPage({
   }
   // スタメン選択肢は「現メンバー（正式アカウント=@b・助っ人でない）」のみ + 助っ人枠1〜4
   const currentMembers = allUsers
-    .filter(u => !u.isGuest && u.email.endsWith('@b'))
+    .filter(u => !u.isGuest && u.memberStatus === 'ACTIVE')
     .sort((a, b) => (attendCounts.get(b.id) ?? 0) - (attendCounts.get(a.id) ?? 0))
     .map(u => ({ id: u.id, name: u.name, number: u.number as number | null }))
   const guestSlots = [1, 2, 3, 4].map(n => ({ id: `__guest_${n}`, name: `助っ人${n}`, number: null as number | null }))

@@ -118,14 +118,15 @@ export default async function AdminMastersPage() {
     getMasterList('locationMaster'),
     getGameTypeLabels(),
     prisma.user.findMany({
-      select: { id: true, name: true, number: true, position: true, email: true, isGuest: true, _count: { select: { gameStats: true } } },
+      select: { id: true, name: true, number: true, position: true, email: true, isGuest: true, memberStatus: true, _count: { select: { gameStats: true } } },
       orderBy: [{ number: 'asc' }, { name: 'asc' }],
     }),
   ])
 
   // カテゴリ分け: 現メンバー(@b・助っ人でない) / 元メンバー(@guest・助っ人でない) / 助っ人(isGuest)
-  const currentMembers = allUsers.filter(u => !u.isGuest && u.email.endsWith('@b'))
-  const formerMembers  = allUsers.filter(u => !u.isGuest && !u.email.endsWith('@b'))
+  const currentMembers = allUsers.filter(u => !u.isGuest && u.memberStatus === 'ACTIVE')
+  const onLeaveMembers = allUsers.filter(u => !u.isGuest && u.memberStatus === 'ON_LEAVE')
+  const formerMembers  = allUsers.filter(u => !u.isGuest && u.memberStatus === 'RETIRED')
   const guests         = allUsers.filter(u => u.isGuest)
 
   return (
@@ -240,7 +241,8 @@ export default async function AdminMastersPage() {
         </p>
 
         {([
-          { label: '現メンバー', list: currentMembers, color: 'text-[#22c55e]', desc: 'ログイン可能な現役メンバー' },
+          { label: '現メンバー', list: currentMembers, color: 'text-[#22c55e]', desc: '活動中のメンバー' },
+          { label: '休部中', list: onLeaveMembers, color: 'text-[#f59e0b]', desc: '一時的に活動を休止中のメンバー' },
           { label: '元メンバー', list: formerMembers, color: 'text-[#94a3b8]', desc: '過去に在籍（背番号あり・脱退）' },
           { label: '助っ人',     list: guests,        color: 'text-[#a78bfa]', desc: '過去に参加した助っ人（背番号なし）' },
         ] as const).map(({ label, list, color, desc }) => (
