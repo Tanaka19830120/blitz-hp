@@ -81,7 +81,10 @@ async function updateMember(formData: FormData) {
 
   // 背番号が変わった場合はログインID（email）とパスワードも更新
   // ただし退団中（@retired）のメンバーはメールサフィックスを維持する
-  const existing = await prisma.user.findUnique({ where: { id }, select: { number: true, email: true } })
+  const existing = await prisma.user.findUnique({
+    where: { id },
+    select: { number: true, email: true, photoUrl: true },
+  })
   const numberChanged = number !== existing?.number
   const isRetired = existing?.email.endsWith('@retired') ?? false
 
@@ -100,6 +103,8 @@ async function updateMember(formData: FormData) {
   const suffix    = isRetired ? '@retired' : '@b'
   const newEmail  = `${loginId}${suffix}`
   const newPwHash = numberChanged && !isRetired ? await bcrypt.hash(`${loginId}${loginId}`, 10) : undefined
+  const photoChanged = String(formData.get('photoUrlChanged')) === 'true'
+  const submittedPhotoUrl = String(formData.get('photoUrl') || '') || null
 
   await prisma.user.update({
     where: { id },
@@ -108,7 +113,8 @@ async function updateMember(formData: FormData) {
       role:     String(formData.get('role')) as 'ADMIN' | 'PLAYER',
       number,
       position: String(formData.get('position') || '') || null,
-      photoUrl: String(formData.get('photoUrl') || '') || null,
+      // 写真を操作していない場合は既存URLを維持する。✕で明示的に消した場合だけ null にする。
+      photoUrl: photoChanged ? submittedPhotoUrl : (existing?.photoUrl ?? null),
       ...(numberChanged ? { email: newEmail, ...(newPwHash ? { password: newPwHash } : {}) } : {}),
     },
   })
@@ -334,7 +340,7 @@ export default async function AdminMembersPage({
             </div>
             <div className="sm:col-span-2">
               <label className="block text-xs text-[#64748b] mb-1.5">写真</label>
-              <PhotoUploader defaultUrl={editMember.photoUrl ?? ''} />
+              <PhotoUploader key={`edit-photo-${editMember.id}`} defaultUrl={editMember.photoUrl ?? ''} />
             </div>
             <div className="sm:col-span-2 flex gap-3">
               <SubmitButton pendingLabel="保存中…" className="btn-primary flex-1 py-2.5">保存する</SubmitButton>

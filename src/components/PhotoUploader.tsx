@@ -10,6 +10,7 @@ interface Props {
 export function PhotoUploader({ defaultUrl = '', name = 'photoUrl' }: Props) {
   const [url, setUrl]         = useState(defaultUrl)
   const [preview, setPreview] = useState(defaultUrl)
+  const [changed, setChanged] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [error, setError]     = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -31,6 +32,7 @@ export function PhotoUploader({ defaultUrl = '', name = 'photoUrl' }: Props) {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Upload failed')
       setUrl(json.url)
+      setChanged(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'アップロードに失敗しました')
       setPreview(defaultUrl)
@@ -43,6 +45,7 @@ export function PhotoUploader({ defaultUrl = '', name = 'photoUrl' }: Props) {
     <div>
       {/* hidden input — フォーム送信時にURLが含まれる */}
       <input type="hidden" name={name} value={url} />
+      <input type="hidden" name={`${name}Changed`} value={changed ? 'true' : 'false'} />
 
       <div className="flex items-center gap-3">
         {/* プレビュー */}
@@ -92,7 +95,7 @@ export function PhotoUploader({ defaultUrl = '', name = 'photoUrl' }: Props) {
               className="text-[10px] text-[#475569] hover:text-[#94a3b8] mt-1 block"
               onClick={() => {
                 const v = prompt('画像URLを入力してください')
-                if (v) { setUrl(v); setPreview(v) }
+                if (v) { setUrl(v); setPreview(v); setChanged(true) }
               }}
             >
               URLで指定する
@@ -104,7 +107,7 @@ export function PhotoUploader({ defaultUrl = '', name = 'photoUrl' }: Props) {
         {(url || preview) && (
           <button
             type="button"
-            onClick={() => { setUrl(''); setPreview('') }}
+            onClick={() => { setUrl(''); setPreview(''); setChanged(true) }}
             className="text-xs text-[#475569] hover:text-[#ef4444] transition-colors shrink-0"
             title="画像を削除"
           >
